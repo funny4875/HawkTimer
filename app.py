@@ -72,7 +72,7 @@ class App:
     if hat: hat=False;cycles=0
     else:
      cycles+=1
-     if cycles>=10 and self.hatframes: hat=True
+     if cycles>=1 and self.hatframes: hat=True
    self.idle_job=self.root.after(durations[index],lambda:animate(next_index,cycles,hat))
   animate()
  def open_messages(self):

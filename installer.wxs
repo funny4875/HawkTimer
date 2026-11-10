@@ -1,5 +1,5 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
- <Package Name="HawkTimer" Manufacturer="HawkTimer" Version="1.1.3" UpgradeCode="DCC441EC-919E-4AA4-99F7-A0ED2AB6E63C" Scope="perUser">
+ <Package Name="HawkTimer" Manufacturer="HawkTimer" Version="1.1.4" UpgradeCode="DCC441EC-919E-4AA4-99F7-A0ED2AB6E63C" Scope="perUser">
   <MajorUpgrade DowngradeErrorMessage="A newer version of HawkTimer is already installed." />
   <MediaTemplate EmbedCab="yes" />
   <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
