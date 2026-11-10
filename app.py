@@ -62,8 +62,18 @@ class App:
   except Exception as e:
    messagebox.showwarning('常駐動畫載入失敗',f'{e}\n改用預設動畫。',parent=self.root)
    self.mainframes,self.maindurations=load_frames(os.path.join(BASE,'mihawk_idle.gif'),(350,380))
-  def animate(index=0):
-   self.canvas.itemconfigure(self.idle_item,image=self.mainframes[index]);self.idle_job=self.root.after(self.maindurations[index],lambda:animate((index+1)%len(self.mainframes)))
+  self.hatframes,self.hatdurations=load_frames(os.path.join(BASE,'mihawk_hat.gif'),(350,380)) if not path else ([],[])
+  def animate(index=0, cycles=0, hat=False):
+   frames=self.hatframes if hat else self.mainframes
+   durations=self.hatdurations if hat else self.maindurations
+   self.canvas.itemconfigure(self.idle_item,image=frames[index]);next_index=index+1
+   if next_index>=len(frames):
+    next_index=0
+    if hat: hat=False;cycles=0
+    else:
+     cycles+=1
+     if cycles>=10 and self.hatframes: hat=True
+   self.idle_job=self.root.after(durations[index],lambda:animate(next_index,cycles,hat))
   animate()
  def open_messages(self):
   try:
