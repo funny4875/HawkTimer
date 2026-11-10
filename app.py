@@ -7,7 +7,7 @@ ICON=os.path.join(BASE,'icon.ico' if getattr(sys,'frozen',False) else 'assets/ic
 CONFIG_DIR=os.path.join(os.environ.get('APPDATA',os.path.expanduser('~')),'HawkPomodoro')
 CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
-DEFAULT={'minutes':25,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
+DEFAULT={'minutes':25,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
 def read_config():
  try:
@@ -47,15 +47,29 @@ class App:
   x=self.cfg['x']; y=self.cfg['y']; self.root.geometry('360x480'+(f'+{x}+{y}' if x is not None and y is not None and x>=0 and y>=0 else '+100+100'))
   self.running=False; self.end=0; self.remaining=int(self.cfg['minutes'])*60; self.alarm=None
   self.canvas=tk.Canvas(self.root,width=360,height=385,bg=KEY,highlightthickness=0); self.canvas.pack()
-  self.mainframes,self.maindurations=load_frames(os.path.join(BASE,'mihawk_action.gif'),(350,380)); self.canvas.create_image(180,190,image=self.mainframes[0]); self.canvas.bind('<ButtonPress-1>',self.drag_start); self.canvas.bind('<B1-Motion>',self.drag_move); self.canvas.bind('<Button-3>',self.popup)
+  self.idle_item=self.canvas.create_image(180,190); self.idle_job=None; self.set_idle(self.cfg.get('idle_gif',''));  self.canvas.bind('<ButtonPress-1>',self.drag_start); self.canvas.bind('<B1-Motion>',self.drag_move); self.canvas.bind('<Button-3>',self.popup)
   box=tk.Frame(self.root,bg='#171927',highlightbackground='#d4ad65',highlightthickness=2); box.pack(fill='x',padx=4)
   self.label=tk.Label(box,font=('Microsoft JhengHei',25,'bold'),fg='#f2d392',bg='#171927'); self.label.pack()
   row=tk.Frame(box,bg='#171927'); row.pack(pady=(0,6))
   self.btn=tk.Button(row,text='開始',width=6,command=self.toggle); self.btn.pack(side='left',padx=2)
-  for text,cmd in [('重設',self.reset),('設定',self.settings),('結束',self.close)]:tk.Button(row,text=text,width=6,command=cmd).pack(side='left',padx=2)
+  for text,cmd in [('重設',self.reset),('文字檔',self.open_messages),('設定',self.settings),('結束',self.close)]:tk.Button(row,text=text,width=6,command=cmd).pack(side='left',padx=2)
   self.menu=tk.Menu(self.root,tearoff=0)
-  for label,cmd in [('設定',self.settings),('預覽提醒動畫',lambda:self.show_alarm(False)),('測試手機通知',lambda:self.notify(True)),('結束',self.close)]:self.menu.add_command(label=label,command=cmd)
+  for label,cmd in [('設定',self.settings),('開啟文字檔',self.open_messages),('預覽提醒動畫',lambda:self.show_alarm(False)),('測試手機通知',lambda:self.notify(True)),('結束',self.close)]:self.menu.add_command(label=label,command=cmd)
   self.root.bind('<Button-3>',self.popup); self.update_label(); self.root.after(100,self.tick)
+ def set_idle(self,path):
+  if self.idle_job: self.root.after_cancel(self.idle_job); self.idle_job=None
+  try: self.mainframes,self.maindurations=load_frames(path or os.path.join(BASE,'mihawk_idle.gif'),(350,380))
+  except Exception as e:
+   messagebox.showwarning('常駐動畫載入失敗',f'{e}\n改用預設動畫。',parent=self.root)
+   self.mainframes,self.maindurations=load_frames(os.path.join(BASE,'mihawk_idle.gif'),(350,380))
+  def animate(index=0):
+   self.canvas.itemconfigure(self.idle_item,image=self.mainframes[index]);self.idle_job=self.root.after(self.maindurations[index],lambda:animate((index+1)%len(self.mainframes)))
+  animate()
+ def open_messages(self):
+  try:
+   if not os.path.exists(MESSAGE_FILE):read_messages(self.cfg)
+   os.startfile(MESSAGE_FILE)
+  except (OSError,ValueError,UnicodeError) as e:messagebox.showerror('無法開啟文字檔',str(e),parent=self.root)
  def drag_start(self,e):self.drag=(e.x_root-self.root.winfo_x(),e.y_root-self.root.winfo_y())
  def drag_move(self,e):self.root.geometry(f'+{max(0,e.x_root-self.drag[0])}+{max(0,e.y_root-self.drag[1])}')
  def popup(self,e):self.menu.tk_popup(e.x_root,e.y_root); return 'break'
@@ -98,16 +112,17 @@ class App:
  def settings(self):
   w=tk.Toplevel(self.root);w.title('HawkTimer 設定');w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
   f=ttk.Frame(w,padding=15);f.grid()
-  minutes=tk.StringVar(value=str(self.cfg['minutes']));topic=tk.StringVar(value=self.cfg['topic']);gif=tk.StringVar(value=self.cfg['gif']);notify=tk.BooleanVar(value=self.cfg['notify']);sound=tk.BooleanVar(value=self.cfg['sound']);top=tk.BooleanVar(value=self.cfg['topmost'])
-  for r,(label,var) in enumerate([('專注時間（分鐘）',minutes),('ntfy 主題',topic),('提醒 GIF / 圖片',gif)]):
+  minutes=tk.StringVar(value=str(self.cfg['minutes']));topic=tk.StringVar(value=self.cfg['topic']);gif=tk.StringVar(value=self.cfg['gif']);idle=tk.StringVar(value=self.cfg.get('idle_gif',''));notify=tk.BooleanVar(value=self.cfg['notify']);sound=tk.BooleanVar(value=self.cfg['sound']);top=tk.BooleanVar(value=self.cfg['topmost'])
+  for r,(label,var) in enumerate([('專注時間（分鐘）',minutes),('ntfy 主題',topic),('提醒 GIF / 圖片',gif),('常駐 GIF / 圖片',idle)]):
    ttk.Label(f,text=label).grid(row=r,column=0,sticky='w',pady=4);ttk.Entry(f,textvariable=var,width=38).grid(row=r,column=1,sticky='ew')
-  def browse():
-   p=filedialog.askopenfilename(parent=w,title='選擇提醒 GIF 或圖片',filetypes=[('圖片','*.gif *.png *.jpg *.jpeg *.webp'),('所有檔案','*.*')])
-   if p:gif.set(p)
-  ttk.Button(f,text='選擇檔案',command=browse).grid(row=2,column=2,padx=4);ttk.Button(f,text='使用預設',command=lambda:gif.set('')).grid(row=2,column=3)
-  for r,(label,var) in enumerate([('時間到發送手機通知',notify),('播放電腦提示音',sound),('計時器置頂',top)],3):ttk.Checkbutton(f,text=label,variable=var).grid(row=r,column=0,columnspan=3,sticky='w')
-  ttk.Label(f,text='提醒文字（支援換行，以獨立一行 ======== 分隔）').grid(row=6,column=0,columnspan=4,sticky='w',pady=(10,2))
-  text=tk.Text(f,width=55,height=7);text.grid(row=7,column=0,columnspan=4)
+  def browse(var):
+   p=filedialog.askopenfilename(parent=w,title='選擇 GIF 或圖片',filetypes=[('圖片','*.gif *.png *.jpg *.jpeg *.webp'),('所有檔案','*.*')])
+   if p:var.set(p)
+  for r,var in [(2,gif),(3,idle)]:
+   ttk.Button(f,text='選擇檔案',command=lambda v=var:browse(v)).grid(row=r,column=2,padx=4);ttk.Button(f,text='使用預設',command=lambda v=var:v.set('')).grid(row=r,column=3)
+  for r,(label,var) in enumerate([('時間到發送手機通知',notify),('播放電腦提示音',sound),('計時器置頂',top)],4):ttk.Checkbutton(f,text=label,variable=var).grid(row=r,column=0,columnspan=3,sticky='w')
+  ttk.Label(f,text='提醒文字（支援換行，以獨立一行 ======== 分隔）').grid(row=7,column=0,columnspan=4,sticky='w',pady=(10,2))
+  text=tk.Text(f,width=55,height=7);text.grid(row=8,column=0,columnspan=4)
   try:
    with open(MESSAGE_FILE,encoding='utf-8-sig') as src: content=src.read()
   except FileNotFoundError: content='\n========\n'.join(self.cfg.get('messages') or DEFAULT['messages'])
@@ -115,18 +130,19 @@ class App:
   text.insert('1.0',content)
   def apply():
    try:
-    m=int(minutes.get());t=topic.get().strip();p=gif.get().strip();content=text.get('1.0','end-1c');messages=parse_messages(content)
+    m=int(minutes.get());t=topic.get().strip();p=gif.get().strip();idlepath=idle.get().strip();content=text.get('1.0','end-1c');messages=parse_messages(content)
     if not 1<=m<=1440:raise ValueError('時間請輸入 1 至 1440 分鐘。')
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',t):raise ValueError('ntfy 主題格式不正確。')
     if not messages:raise ValueError('請至少輸入一句提醒文字。')
-    if p:
-     with Image.open(p) as im: im.seek(0);im.load()
+    for image_path in (p,idlepath):
+     if image_path:
+      with Image.open(image_path) as im: im.seek(0);im.load()
     with open(MESSAGE_FILE,'w',encoding='utf-8') as dest: dest.write(content)
    except Exception as e:messagebox.showerror('設定錯誤',str(e),parent=w);return
-   changed=m!=self.cfg['minutes'];self.cfg.update(minutes=m,topic=t,gif=p,messages=messages,notify=notify.get(),sound=sound.get(),topmost=top.get());self.root.attributes('-topmost',top.get());self.save()
+   changed=m!=self.cfg['minutes'];self.cfg.update(minutes=m,topic=t,gif=p,idle_gif=idlepath,messages=messages,notify=notify.get(),sound=sound.get(),topmost=top.get());self.root.attributes('-topmost',top.get());self.set_idle(idlepath);self.save()
    if changed:self.reset()
    w.destroy()
-  ttk.Button(f,text='儲存',command=apply).grid(row=8,column=3,pady=10)
+  ttk.Button(f,text='儲存',command=apply).grid(row=9,column=3,pady=10)
  def show_alarm(self,actual,message=None):
   if message is None:
    try: message=random.choice(read_messages(self.cfg))
@@ -139,11 +155,13 @@ class App:
   w=tk.Toplevel(self.root);self.alarm=w;w.overrideredirect(True);w.configure(bg=KEY);w.wm_attributes('-transparentcolor',KEY);w.attributes('-topmost',True)
   height=min(w.winfo_screenheight()-30, max(440, 400+sum(max(1,math.ceil(len(line)/18)) for line in message.split('\n'))*25));x=max(0,w.winfo_screenwidth()-380);y=max(0,(w.winfo_screenheight()-height)//2);w.geometry(f'360x{height}+{x}+{y}')
   c=tk.Canvas(w,width=360,height=height,bg=KEY,highlightthickness=0);c.pack();item=c.create_image(180,175,image=frames[0]);c.create_rectangle(8,355,352,height-2,fill='#171927',outline='#d4ad65',width=2)
-  line=c.create_text(180,365,anchor='n',text='',fill='white',font=('Microsoft JhengHei',14,'bold'),width=315,justify='center');c.create_text(180,height-16,text='點擊關閉提醒',fill='#e5cf9c',font=('Microsoft JhengHei',10));w.bind('<Button-1>',lambda e:w.destroy());w.bind('<Escape>',lambda e:w.destroy())
+  textframe=tk.Frame(w,bg='#171927');c.create_window(18,365,anchor='nw',window=textframe,width=324,height=height-400)
+  text=tk.Text(textframe,wrap='word',font=('Microsoft JhengHei',14,'bold'),fg='white',bg='#171927',relief='flat',borderwidth=0,highlightthickness=0,cursor='arrow');scroll=ttk.Scrollbar(textframe,orient='vertical',command=text.yview);text.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');text.pack(side='left',fill='both',expand=True);text.configure(state='disabled')
+  c.create_text(180,height-16,text='點擊圖片關閉提醒',fill='#e5cf9c',font=('Microsoft JhengHei',10));c.bind('<Button-1>',lambda e:w.destroy());w.bind('<Escape>',lambda e:w.destroy())
   def typewrite(i=0):
    if not w.winfo_exists():return
-   c.itemconfigure(line,text=message[:i]);
-   if i<len(message):w.after(90,lambda:typewrite(i+1))
+   if i<len(message):
+    text.configure(state='normal');text.insert('end',message[i]);text.configure(state='disabled');text.see('end');w.after(90,lambda:typewrite(i+1))
   def animate(i=0):
    if not w.winfo_exists():return
    c.itemconfigure(item,image=frames[i]);w.after(durations[i],lambda:animate((i+1)%len(frames)))
