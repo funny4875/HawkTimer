@@ -1,0 +1,24 @@
+# HawkTimer 鷹眼計時
+
+Windows 透明桌面蕃茄鐘，時間到時播放 GIF 與提醒文字，並可透過 ntfy 發送 Android 通知。
+
+## 功能
+
+- 透明背景及置頂計時視窗，可拖曳角色移動，右鍵開啟選單。
+- 設定專注時間、電腦提示音與 ntfy 通知；設定和視窗位置會自動保存。
+- 支援選擇 GIF 或圖片作為提醒動畫；每次隨機選取一則自訂文字，逐字顯示。
+- 手機持續響鈴需在 Android ntfy 的訂閱通知設定中啟用。
+
+## 執行
+
+需要 Windows、Python 3.10 以上。於專案資料夾執行：
+
+```powershell
+py -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python app.py
+```
+
+開啟設定，將 ntfy 主題改為手機訂閱的主題。主題預設值僅供示範，未受保護的 ntfy 主題只要知道名稱便可能被讀取或發布；請勿傳送私人資訊。設定儲存於 `%APPDATA%\HawkPomodoro\settings.json`，倒數進度不會保存。計時需保持程式及電腦運行，手機通知需連網。
+
+程式使用 Windows 信任存放區驗證 HTTPS 憑證。內附角色動圖為 AI 生成的同人素材；角色權利屬原權利人。
