@@ -5,6 +5,7 @@ from PIL import Image, ImageTk, ImageSequence
 BASE=getattr(sys,'_MEIPASS',os.path.dirname(os.path.abspath(__file__)))
 CONFIG_DIR=os.path.join(os.environ.get('APPDATA',os.path.expanduser('~')),'HawkPomodoro')
 CONFIG=os.path.join(CONFIG_DIR,'settings.json')
+MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
 DEFAULT={'minutes':25,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
 def read_config():
@@ -12,9 +13,22 @@ def read_config():
   with open(CONFIG,encoding='utf-8') as f: d=json.load(f)
   return {**DEFAULT,**{k:v for k,v in d.items() if k in DEFAULT}}
  except (OSError,ValueError,TypeError):return DEFAULT.copy()
-def send_notification(topic):
+def parse_messages(content):
+ parts=re.split(r'(?m)^[ \t]*========[ \t]*\r?$',content)
+ return [part.strip('\r\n') for part in parts if part.strip()]
+def read_messages(cfg):
+ try:
+  with open(MESSAGE_FILE,encoding='utf-8-sig') as f: messages=parse_messages(f.read())
+  if not messages: raise ValueError('message.txt 沒有任何訊息')
+  return messages
+ except FileNotFoundError:
+  messages=cfg.get('messages') or DEFAULT['messages']
+  with open(MESSAGE_FILE,'w',encoding='utf-8') as f: f.write('\n========\n'.join(messages)+'\n')
+  return messages
+
+def send_notification(topic, message):
  if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',topic):raise ValueError('主題格式不正確')
- req=urllib.request.Request('https://ntfy.sh/'+topic,data='番茄鐘時間到了！'.encode(),headers={'Priority':'5','Title':'Pomodoro','Cache':'no','Content-Type':'text/plain; charset=utf-8'},method='POST')
+ req=urllib.request.Request('https://ntfy.sh/'+topic,data=message.encode('utf-8'),headers={'Priority':'5','Title':'Pomodoro','Cache':'no','Content-Type':'text/plain; charset=utf-8'},method='POST')
  with urllib.request.urlopen(req,timeout=12,context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)) as response:
   if response.status!=200:raise RuntimeError('HTTP '+str(response.status))
 def load_frames(path, size):
@@ -61,14 +75,21 @@ class App:
   if self.running:
    self.remaining=max(0,self.end-time.monotonic());self.update_label()
    if self.remaining<=0:
-    self.running=False;self.btn.config(text='開始');self.show_alarm(True)
-    if self.cfg['notify']:self.notify(False)
+    self.running=False;self.btn.config(text='開始')
+    try: message=random.choice(read_messages(self.cfg))
+    except (OSError, ValueError, UnicodeError) as e:
+     messagebox.showwarning('訊息讀取失敗',str(e),parent=self.root); message=random.choice(self.cfg.get('messages') or DEFAULT['messages'])
+    self.show_alarm(True,message)
+    if self.cfg['notify']:self.notify(False,message)
   self.root.after(100,self.tick)
- def notify(self,manual):
+ def notify(self,manual,message=None):
+  if message is None:
+   try: message=random.choice(read_messages(self.cfg))
+   except (OSError, ValueError, UnicodeError) as e: messagebox.showwarning('訊息讀取失敗',str(e),parent=self.root);return
   topic=self.cfg['topic']
   def worker():
    try:
-    send_notification(topic)
+    send_notification(topic,message)
     if manual:self.root.after(0,lambda:messagebox.showinfo('手機通知','已送到伺服器，請確認手機是否響鈴。',parent=self.root))
    except Exception as e:
     msg=str(e);self.root.after(0,lambda:messagebox.showwarning('手機通知失敗',msg,parent=self.root))
@@ -84,32 +105,40 @@ class App:
    if p:gif.set(p)
   ttk.Button(f,text='選擇檔案',command=browse).grid(row=2,column=2,padx=4);ttk.Button(f,text='使用預設',command=lambda:gif.set('')).grid(row=2,column=3)
   for r,(label,var) in enumerate([('時間到發送手機通知',notify),('播放電腦提示音',sound),('計時器置頂',top)],3):ttk.Checkbutton(f,text=label,variable=var).grid(row=r,column=0,columnspan=3,sticky='w')
-  ttk.Label(f,text='提醒文字（每行一句，隨機選取並逐字顯示）').grid(row=6,column=0,columnspan=4,sticky='w',pady=(10,2))
-  text=tk.Text(f,width=55,height=5);text.grid(row=7,column=0,columnspan=4);text.insert('1.0','\n'.join(self.cfg['messages']))
+  ttk.Label(f,text='提醒文字（支援換行，以獨立一行 ======== 分隔）').grid(row=6,column=0,columnspan=4,sticky='w',pady=(10,2))
+  text=tk.Text(f,width=55,height=7);text.grid(row=7,column=0,columnspan=4)
+  try:
+   with open(MESSAGE_FILE,encoding='utf-8-sig') as src: content=src.read()
+  except FileNotFoundError: content='\n========\n'.join(self.cfg.get('messages') or DEFAULT['messages'])
+  except (OSError, UnicodeError) as e: messagebox.showerror('訊息讀取失敗',str(e),parent=w);w.destroy();return
+  text.insert('1.0',content)
   def apply():
    try:
-    m=int(minutes.get());t=topic.get().strip();p=gif.get().strip();messages=[line.strip() for line in text.get('1.0','end').splitlines() if line.strip()]
+    m=int(minutes.get());t=topic.get().strip();p=gif.get().strip();content=text.get('1.0','end-1c');messages=parse_messages(content)
     if not 1<=m<=1440:raise ValueError('時間請輸入 1 至 1440 分鐘。')
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,64}',t):raise ValueError('ntfy 主題格式不正確。')
     if not messages:raise ValueError('請至少輸入一句提醒文字。')
     if p:
      with Image.open(p) as im: im.seek(0);im.load()
+    with open(MESSAGE_FILE,'w',encoding='utf-8') as dest: dest.write(content)
    except Exception as e:messagebox.showerror('設定錯誤',str(e),parent=w);return
    changed=m!=self.cfg['minutes'];self.cfg.update(minutes=m,topic=t,gif=p,messages=messages,notify=notify.get(),sound=sound.get(),topmost=top.get());self.root.attributes('-topmost',top.get());self.save()
    if changed:self.reset()
    w.destroy()
   ttk.Button(f,text='儲存',command=apply).grid(row=8,column=3,pady=10)
- def show_alarm(self,actual):
+ def show_alarm(self,actual,message=None):
+  if message is None:
+   try: message=random.choice(read_messages(self.cfg))
+   except (OSError,ValueError,UnicodeError) as e: messagebox.showwarning('訊息讀取失敗',str(e),parent=self.root);return
   if self.alarm and self.alarm.winfo_exists():self.alarm.destroy()
   path=self.cfg['gif'] or os.path.join(BASE,'mihawk_action.gif')
   try:frames,durations=load_frames(path,(350,350))
   except Exception as e:
    messagebox.showwarning('動畫載入失敗',f'{e}\n改用預設動畫。',parent=self.root);frames,durations=load_frames(os.path.join(BASE,'mihawk_action.gif'),(350,350))
   w=tk.Toplevel(self.root);self.alarm=w;w.overrideredirect(True);w.configure(bg=KEY);w.wm_attributes('-transparentcolor',KEY);w.attributes('-topmost',True)
-  x=max(0,w.winfo_screenwidth()-380);y=max(0,(w.winfo_screenheight()-440)//2);w.geometry(f'360x440+{x}+{y}')
-  c=tk.Canvas(w,width=360,height=440,bg=KEY,highlightthickness=0);c.pack();item=c.create_image(180,175,image=frames[0]);c.create_rectangle(8,355,352,438,fill='#171927',outline='#d4ad65',width=2)
-  line=c.create_text(180,386,text='',fill='white',font=('Microsoft JhengHei',14,'bold'),width=315,justify='center');c.create_text(180,422,text='點擊關閉提醒',fill='#e5cf9c',font=('Microsoft JhengHei',10));w.bind('<Button-1>',lambda e:w.destroy());w.bind('<Escape>',lambda e:w.destroy())
-  message=random.choice(self.cfg['messages'])
+  height=min(w.winfo_screenheight()-30, max(440, 400+sum(max(1,math.ceil(len(line)/18)) for line in message.split('\n'))*25));x=max(0,w.winfo_screenwidth()-380);y=max(0,(w.winfo_screenheight()-height)//2);w.geometry(f'360x{height}+{x}+{y}')
+  c=tk.Canvas(w,width=360,height=height,bg=KEY,highlightthickness=0);c.pack();item=c.create_image(180,175,image=frames[0]);c.create_rectangle(8,355,352,height-2,fill='#171927',outline='#d4ad65',width=2)
+  line=c.create_text(180,365,anchor='n',text='',fill='white',font=('Microsoft JhengHei',14,'bold'),width=315,justify='center');c.create_text(180,height-16,text='點擊關閉提醒',fill='#e5cf9c',font=('Microsoft JhengHei',10));w.bind('<Button-1>',lambda e:w.destroy());w.bind('<Escape>',lambda e:w.destroy())
   def typewrite(i=0):
    if not w.winfo_exists():return
    c.itemconfigure(line,text=message[:i]);
