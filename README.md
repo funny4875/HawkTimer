@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/icon.png" alt="HawkTimer 圖示" width="160"></p>
+
 # HawkTimer 鷹眼計時
 
 Windows 透明桌面蕃茄鐘，時間到時播放 GIF 與提醒文字，並可透過 ntfy 發送 Android 通知。
@@ -9,7 +11,11 @@ Windows 透明桌面蕃茄鐘，時間到時播放 GIF 與提醒文字，並可�
 - 支援選擇 GIF 或圖片作為提醒動畫；每次隨機選取一則自訂文字，逐字顯示。
 - 手機持續響鈴需在 Android ntfy 的訂閱通知設定中啟用。
 
-## 執行
+## 安裝
+
+前往 [Releases](https://github.com/funny4875/HawkTimer/releases) 下載 MSI，安裝後可從桌面或開始選單啟動。程式安裝於 `%LOCALAPPDATA%\HawkTimer`，`message.txt` 位於同一資料夾。MSI 未經數位簽章。
+
+## 從原始碼執行
 
 需要 Windows、Python 3.10 以上。於專案資料夾執行：
 

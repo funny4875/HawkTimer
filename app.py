@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk, ImageSequence
 BASE=getattr(sys,'_MEIPASS',os.path.dirname(os.path.abspath(__file__)))
+ICON=os.path.join(BASE,'icon.ico' if getattr(sys,'frozen',False) else 'assets/icon.ico')
 CONFIG_DIR=os.path.join(os.environ.get('APPDATA',os.path.expanduser('~')),'HawkPomodoro')
 CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
@@ -42,7 +43,7 @@ def load_frames(path, size):
  return frames,durations
 class App:
  def __init__(self):
-  self.cfg=read_config(); self.root=tk.Tk(); self.root.title('鷹眼蕃茄鐘'); self.root.overrideredirect(True); self.root.configure(bg=KEY); self.root.wm_attributes('-transparentcolor',KEY); self.root.attributes('-topmost',bool(self.cfg['topmost']))
+  self.cfg=read_config(); self.root=tk.Tk(); self.root.title('HawkTimer 鷹眼計時'); self.root.iconbitmap(ICON);  self.root.overrideredirect(True); self.root.configure(bg=KEY); self.root.wm_attributes('-transparentcolor',KEY); self.root.attributes('-topmost',bool(self.cfg['topmost']))
   x=self.cfg['x']; y=self.cfg['y']; self.root.geometry('360x480'+(f'+{x}+{y}' if x is not None and y is not None and x>=0 and y>=0 else '+100+100'))
   self.running=False; self.end=0; self.remaining=int(self.cfg['minutes'])*60; self.alarm=None
   self.canvas=tk.Canvas(self.root,width=360,height=385,bg=KEY,highlightthickness=0); self.canvas.pack()
@@ -95,7 +96,7 @@ class App:
     msg=str(e);self.root.after(0,lambda:messagebox.showwarning('手機通知失敗',msg,parent=self.root))
   threading.Thread(target=worker,daemon=True).start()
  def settings(self):
-  w=tk.Toplevel(self.root);w.title('設定');w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
+  w=tk.Toplevel(self.root);w.title('HawkTimer 設定');w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
   f=ttk.Frame(w,padding=15);f.grid()
   minutes=tk.StringVar(value=str(self.cfg['minutes']));topic=tk.StringVar(value=self.cfg['topic']);gif=tk.StringVar(value=self.cfg['gif']);notify=tk.BooleanVar(value=self.cfg['notify']);sound=tk.BooleanVar(value=self.cfg['sound']);top=tk.BooleanVar(value=self.cfg['topmost'])
   for r,(label,var) in enumerate([('專注時間（分鐘）',minutes),('ntfy 主題',topic),('提醒 GIF / 圖片',gif)]):

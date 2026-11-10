@@ -1,0 +1,14 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+ <Package Name="HawkTimer" Manufacturer="HawkTimer" Version="1.0.0" UpgradeCode="DCC441EC-919E-4AA4-99F7-A0ED2AB6E63C" Scope="perUser">
+  <MajorUpgrade DowngradeErrorMessage="A newer version of HawkTimer is already installed." />
+  <MediaTemplate EmbedCab="yes" />
+  <Icon Id="AppIcon" SourceFile="$(var.IconPath)" />
+  <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+  <StandardDirectory Id="LocalAppDataFolder"><Directory Id="INSTALLFOLDER" Name="HawkTimer" /></StandardDirectory>
+  <StandardDirectory Id="ProgramMenuFolder"><Directory Id="ProgramMenuDir" Name="HawkTimer" /></StandardDirectory>
+  <Feature Id="Main"><ComponentRef Id="Application" /><ComponentRef Id="MenuShortcut" /><ComponentRef Id="DesktopShortcut" /></Feature>
+  <DirectoryRef Id="INSTALLFOLDER"><Component Id="Application" Guid="*"><File Id="AppExe" Source="$(var.ExePath)" KeyPath="yes" /></Component></DirectoryRef>
+  <DirectoryRef Id="ProgramMenuDir"><Component Id="MenuShortcut" Guid="*"><Shortcut Id="StartMenuShortcut" Name="HawkTimer" Target="[INSTALLFOLDER]HawkTimer.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" /><RemoveFolder Id="RemoveProgramMenuDir" On="uninstall" /><RegistryValue Root="HKCU" Key="Software\HawkTimer" Name="MenuShortcut" Value="1" Type="integer" KeyPath="yes" /></Component></DirectoryRef>
+  <StandardDirectory Id="DesktopFolder"><Component Id="DesktopShortcut" Guid="*"><Shortcut Id="DesktopShortcutLink" Name="HawkTimer" Target="[INSTALLFOLDER]HawkTimer.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" /><RegistryValue Root="HKCU" Key="Software\HawkTimer" Name="DesktopShortcut" Value="1" Type="integer" KeyPath="yes" /></Component></StandardDirectory>
+ </Package>
+</Wix>
