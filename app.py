@@ -49,7 +49,7 @@ class App:
   self.canvas=tk.Canvas(self.root,width=360,height=385,bg=KEY,highlightthickness=0); self.canvas.pack()
   self.idle_item=self.canvas.create_image(180,190); self.idle_job=None; self.set_idle(self.cfg.get('idle_gif',''));  self.canvas.bind('<ButtonPress-1>',self.drag_start); self.canvas.bind('<B1-Motion>',self.drag_move); self.canvas.bind('<Button-3>',self.popup)
   box=tk.Frame(self.root,bg='#171927',highlightbackground='#d4ad65',highlightthickness=2); box.pack(fill='x',padx=4)
-  self.label=tk.Label(box,font=('Microsoft JhengHei',25,'bold'),fg='#f2d392',bg='#171927'); self.label.pack()
+  self.label=tk.Label(box,font=('Microsoft JhengHei',25,'bold'),fg='#f2d392',bg='#171927',cursor='hand2'); self.label.pack();self.label.bind('<Button-1>',self.edit_time);self.edit_entry=None
   row=tk.Frame(box,bg='#171927'); row.pack(pady=(0,6))
   self.btn=tk.Button(row,text='開始',width=6,command=self.toggle); self.btn.pack(side='left',padx=2)
   for text,cmd in [('重設',self.reset),('文字檔',self.open_messages),('設定',self.settings),('結束',self.close)]:tk.Button(row,text=text,width=6,command=cmd).pack(side='left',padx=2)
@@ -89,7 +89,34 @@ class App:
   os.replace(tmp,CONFIG)
  def update_label(self):
   s=max(0,math.ceil(self.remaining)); self.label.config(text=f'{s//60:02d}:{s%60:02d}')
+ def edit_time(self,event=None):
+  if self.edit_entry is not None:return
+  self.edit_was_running=self.running;self.edit_previous_text=self.btn.cget('text')
+  if self.running:
+   self.remaining=max(0,self.end-time.monotonic());self.running=False;self.btn.config(text='繼續')
+  current=max(0,math.ceil(self.remaining));self.label.pack_forget()
+  self.edit_entry=tk.Entry(self.label.master,font=('Microsoft JhengHei',23,'bold'),justify='center',width=8,fg='#f2d392',bg='#303346',insertbackground='white')
+  self.edit_entry.insert(0,f'{current//60:02d}:{current%60:02d}');self.edit_entry.pack(before=self.btn.master)
+  self.edit_entry.bind('<Return>',self.apply_time_edit);self.edit_entry.bind('<Escape>',self.cancel_time_edit);self.btn.config(text='確定',command=self.apply_time_edit)
+  self.edit_entry.focus_set();self.edit_entry.selection_range(0,'end')
+ def apply_time_edit(self,event=None):
+  if self.edit_entry is None:return
+  value=self.edit_entry.get().strip();match=re.fullmatch(r'(\d{1,4}):(\d{1,2})',value)
+  if not match or int(match.group(2))>59 or not 1<=int(match.group(1))*60+int(match.group(2))<=86400:
+   self.edit_entry.focus_set();messagebox.showwarning('時間格式錯誤','請輸入 分:秒，例如 25:00 或 0:30，範圍為 1 秒至 1440 分鐘。',parent=self.root);return 'break'
+  minutes,seconds=map(int,match.groups());self.cfg.update(minutes=minutes,seconds=seconds)
+  entry=self.edit_entry;self.edit_entry=None;entry.destroy();self.label.pack(before=self.btn.master);self.btn.config(command=self.toggle);self.reset()
+  try:self.save()
+  except OSError as e:messagebox.showwarning('設定儲存失敗',str(e),parent=self.root)
+  return 'break'
+ def cancel_time_edit(self,event=None):
+  if self.edit_entry is None:return
+  entry=self.edit_entry;self.edit_entry=None;entry.destroy();self.label.pack(before=self.btn.master);self.btn.config(command=self.toggle);self.update_label()
+  if self.edit_was_running:self.toggle()
+  else:self.btn.config(text=self.edit_previous_text)
+  return 'break'
  def toggle(self):
+  if self.edit_entry is not None:return
   if self.running:self.remaining=max(0,self.end-time.monotonic());self.running=False;self.btn.config(text='繼續')
   else:
    if self.remaining<=0:self.remaining=int(self.cfg['minutes'])*60+int(self.cfg.get('seconds',0))
