@@ -190,9 +190,10 @@ class App:
   try:frames,durations=load_frames(path,(350,350))
   except Exception as e:
    messagebox.showwarning('動畫載入失敗',f'{e}\n改用預設動畫。',parent=self.root);frames,durations=load_frames(os.path.join(BASE,'mihawk_action.gif'),(350,350))
-  w=tk.Toplevel(self.root);self.alarm=w;self.canvas.itemconfigure(self.idle_item,state='hidden')
+  w=tk.Toplevel(self.root);self.alarm=w;self.root.withdraw()
   def restore_idle(event):
-   if event.widget is w and self.root.winfo_exists():self.canvas.itemconfigure(self.idle_item,state='normal');self.alarm=None
+   if event.widget is w and self.root.winfo_exists():
+    self.alarm=None;self.root.deiconify()
   w.bind('<Destroy>',restore_idle);w.overrideredirect(True);w.configure(bg=KEY);w.wm_attributes('-transparentcolor',KEY);w.attributes('-topmost',True)
   height=min(w.winfo_screenheight()-30, max(440, 400+sum(max(1,math.ceil(len(line)/18)) for line in message.split('\n'))*25));x=max(0,w.winfo_screenwidth()-380);y=max(0,(w.winfo_screenheight()-height)//2);w.geometry(f'360x{height}+{x}+{y}')
   c=tk.Canvas(w,width=360,height=height,bg=KEY,highlightthickness=0);c.pack();item=c.create_image(180,175,image=frames[0]);c.create_rectangle(8,355,352,height-2,fill='#171927',outline='#d4ad65',width=2)
