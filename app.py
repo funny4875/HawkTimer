@@ -9,7 +9,7 @@ CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
 DEFAULT={'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
-APP_VERSION='1.2.0'
+APP_VERSION='1.2.1'
 RELEASE_API='https://api.github.com/repos/funny4875/HawkTimer/releases/latest'
 def read_config():
  try:
@@ -51,6 +51,15 @@ def get_latest_release():
   raise ValueError('新版本尚未提供預期的 MSI 安裝檔')
  return ('.'.join(map(str,version)),expected)
 
+def color_key_frame(rgba):
+ # Windows colour-key transparency is binary: avoid blending semi-transparent
+ # edges against the key, which leaves a visible magenta fringe.
+ alpha=rgba.getchannel('A').point(lambda value: 255 if value>=128 else 0)
+ rgb=rgba.convert('RGB')
+ key=Image.new('RGB',rgba.size,(255,0,255))
+ key.paste(rgb,mask=alpha)
+ return key
+
 def load_frames(path, size, upscale=False):
  frames=[]; durations=[]
  with Image.open(path) as im:
@@ -59,8 +68,8 @@ def load_frames(path, size, upscale=False):
    if upscale:
     factor=min(size[0]/rgba.width,size[1]/rgba.height);rgba=rgba.resize((max(1,round(rgba.width*factor)),max(1,round(rgba.height*factor))),Image.Resampling.LANCZOS)
    else:rgba.thumbnail(size,Image.Resampling.LANCZOS)
-   bg=Image.new('RGBA',rgba.size,(255,0,255,255)); bg.alpha_composite(rgba)
-   frames.append(ImageTk.PhotoImage(bg.convert('RGB'))); durations.append(max(40,int(frame.info.get('duration',100) or 100)))
+   keyed=color_key_frame(rgba)
+   frames.append(ImageTk.PhotoImage(keyed)); durations.append(max(40,int(frame.info.get('duration',100) or 100)))
  if not frames:raise ValueError('圖片沒有畫格')
  return frames,durations
 class App:
