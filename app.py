@@ -9,6 +9,8 @@ CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
 DEFAULT={'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
+APP_VERSION='1.2.0'
+RELEASE_API='https://api.github.com/repos/funny4875/HawkTimer/releases/latest'
 def read_config():
  try:
   with open(CONFIG,encoding='utf-8') as f: d=json.load(f)
@@ -32,6 +34,23 @@ def send_notification(topic, message):
  req=urllib.request.Request('https://ntfy.sh/'+topic,data=message.encode('utf-8'),headers={'Priority':'5','Title':'Pomodoro','Cache':'no','Content-Type':'text/plain; charset=utf-8'},method='POST')
  with urllib.request.urlopen(req,timeout=12,context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)) as response:
   if response.status!=200:raise RuntimeError('HTTP '+str(response.status))
+def version_tuple(value):
+ match=re.fullmatch(r'v?(\d+)\.(\d+)\.(\d+)',value or '')
+ return tuple(map(int,match.groups())) if match else None
+
+def get_latest_release():
+ req=urllib.request.Request(RELEASE_API,headers={'Accept':'application/vnd.github+json','User-Agent':'HawkTimer/'+APP_VERSION})
+ with urllib.request.urlopen(req,timeout=10,context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)) as response:
+  data=json.load(response)
+ version=version_tuple(data.get('tag_name'))
+ if not version or data.get('draft') or data.get('prerelease'):raise ValueError('GitHub 版本資訊無效')
+ tag='v'+'.'.join(map(str,version));filename='HawkTimer-'+'.'.join(map(str,version))+'-x64.msi'
+ expected='https://github.com/funny4875/HawkTimer/releases/download/'+tag+'/'+filename
+ if version<=version_tuple(APP_VERSION):return None
+ if not any(asset.get('name')==filename and asset.get('browser_download_url')==expected for asset in data.get('assets',[])):
+  raise ValueError('新版本尚未提供預期的 MSI 安裝檔')
+ return ('.'.join(map(str,version)),expected)
+
 def load_frames(path, size, upscale=False):
  frames=[]; durations=[]
  with Image.open(path) as im:
@@ -50,6 +69,7 @@ class App:
   x=self.cfg['x']; y=self.cfg['y']; self.root.geometry('360x480'+(f'+{x}+{y}' if x is not None and y is not None and x>=0 and y>=0 else '+100+100'))
   self.running=False; self.end=0; self.remaining=int(self.cfg['minutes'])*60+int(self.cfg.get('seconds',0)); self.alarm=None
   self.tray_icon=None;self.tray_hidden=False;self.tray_starting=False;self.tray_events=queue.Queue()
+  self.update_events=queue.Queue();self.update_checking=False;self.pending_update=None
   self.canvas=tk.Canvas(self.root,width=360,height=385,bg=KEY,highlightthickness=0); self.canvas.pack()
   self.idle_item=self.canvas.create_image(180,190); self.idle_job=None; self.set_idle(self.cfg.get('idle_gif',''));  self.canvas.bind('<ButtonPress-1>',self.drag_start); self.canvas.bind('<B1-Motion>',self.drag_move); self.canvas.bind('<Button-3>',self.popup)
   box=tk.Frame(self.root,bg='#171927',highlightbackground='#d4ad65',highlightthickness=2); box.pack(fill='x',padx=4)
@@ -58,8 +78,30 @@ class App:
   self.btn=tk.Button(row,text='開始',width=5,command=self.toggle); self.btn.pack(side='left',padx=2)
   for text,cmd in [('重設',self.reset),('文字檔',self.open_messages),('設定',self.settings),('縮小',self.minimize_to_tray),('結束',self.close)]:tk.Button(row,text=text,width=5,command=cmd).pack(side='left',padx=2)
   self.menu=tk.Menu(self.root,tearoff=0)
-  for label,cmd in [('縮小至系統匣',self.minimize_to_tray),('設定',self.settings),('開啟文字檔',self.open_messages),('預覽提醒動畫',lambda:self.show_alarm(False)),('測試手機通知',lambda:self.notify(True)),('結束',self.close)]:self.menu.add_command(label=label,command=cmd)
-  self.update_window_size();self.root.bind('<Button-3>',self.popup); self.update_label(); self.root.after(100,self.tick);self.root.after(100,self.process_tray_events)
+  for label,cmd in [('縮小至系統匣',self.minimize_to_tray),('設定',self.settings),('檢查更新',lambda:self.check_updates(True)),('開啟文字檔',self.open_messages),('預覽提醒動畫',lambda:self.show_alarm(False)),('測試手機通知',lambda:self.notify(True)),('結束',self.close)]:self.menu.add_command(label=label,command=cmd)
+  self.update_window_size();self.root.bind('<Button-3>',self.popup); self.update_label(); self.root.after(100,self.tick);self.root.after(100,self.process_tray_events);self.root.after(100,self.process_update_events);self.root.after(2000,self.check_updates)
+ def check_updates(self,manual=False):
+  if self.update_checking:return
+  self.update_checking=True
+  def worker():
+   try:self.update_events.put(('result',manual,get_latest_release()))
+   except Exception as error:self.update_events.put(('error',manual,str(error)))
+  threading.Thread(target=worker,daemon=True).start()
+ def process_update_events(self):
+  try:
+   while True:
+    kind,manual,result=self.update_events.get_nowait();self.update_checking=False
+    if kind=='error':
+     if manual:messagebox.showwarning('檢查更新失敗','目前無法檢查更新：'+result,parent=self.root)
+    elif result:self.pending_update=result
+    elif manual:messagebox.showinfo('檢查更新',f'目前已是最新版本（{APP_VERSION}）。',parent=self.root)
+  except queue.Empty:pass
+  if self.pending_update and not self.tray_hidden and not self.tray_starting and not (self.alarm and self.alarm.winfo_exists()) and self.root.winfo_ismapped():
+   version,url=self.pending_update;self.pending_update=None
+   if messagebox.askyesno('發現新版 HawkTimer',f'目前版本：{APP_VERSION}\n最新版本：{version}\n\n是否下載新版 MSI？\n下載後請先關閉 HawkTimer，再開啟安裝檔。',parent=self.root):
+    try:os.startfile(url)
+    except OSError as error:messagebox.showerror('無法開啟下載',str(error),parent=self.root)
+  self.root.after(250,self.process_update_events)
  def minimize_to_tray(self):
   if self.tray_hidden or self.tray_starting:return
   if self.edit_entry is not None:self.cancel_time_edit()
