@@ -10,7 +10,7 @@ CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
 DEFAULT={'calendar_notify':False,'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
-APP_VERSION='1.4.0'
+APP_VERSION='1.4.1'
 RELEASE_API='https://api.github.com/repos/funny4875/HawkTimer/releases/latest'
 def read_config():
  try:
@@ -75,7 +75,7 @@ def load_frames(path, size, upscale=False):
  return frames,durations
 class App:
  def __init__(self):
-  self.cfg=read_config(); self.root=tk.Tk(); self.root.title('HawkTimer 鷹眼計時'); self.root.iconbitmap(ICON);  self.root.overrideredirect(True); self.root.configure(bg=KEY); self.root.wm_attributes('-transparentcolor',KEY); self.root.attributes('-topmost',bool(self.cfg['topmost']))
+  self.cfg=read_config(); self.icon_path=ICON; self.root=tk.Tk(); self.root.title('HawkTimer 鷹眼計時'); self.root.iconbitmap(ICON);  self.root.overrideredirect(True); self.root.configure(bg=KEY); self.root.wm_attributes('-transparentcolor',KEY); self.root.attributes('-topmost',bool(self.cfg['topmost']))
   x=self.cfg['x']; y=self.cfg['y']; self.root.geometry('360x480'+(f'+{x}+{y}' if x is not None and y is not None and x>=0 and y>=0 else '+100+100'))
   self.running=False; self.end=0; self.remaining=int(self.cfg['minutes'])*60+int(self.cfg.get('seconds',0)); self.alarm=None
   self.tray_icon=None;self.tray_hidden=False;self.tray_starting=False;self.tray_events=queue.Queue()
@@ -249,8 +249,17 @@ class App:
     msg=str(e);self.root.after(0,lambda:messagebox.showwarning('手機通知失敗',msg,parent=self.root))
   threading.Thread(target=worker,daemon=True).start()
  def settings(self):
-  w=tk.Toplevel(self.root);w.title('HawkTimer 設定 v'+APP_VERSION);w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
-  f=ttk.Frame(w,padding=15);f.grid()
+  menu=tk.Menu(self.root,tearoff=0,font=('Microsoft JhengHei',10))
+  menu.add_command(label='設定鬧鐘',command=self.alarm_settings)
+  menu.add_command(label='設定 Google 日曆',command=self.calendar.settings)
+  try:menu.tk_popup(self.root.winfo_pointerx(),self.root.winfo_pointery())
+  finally:menu.grab_release()
+ def alarm_settings(self):
+  w=tk.Toplevel(self.root);w.title('HawkTimer 鬧鐘設定 v'+APP_VERSION);w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
+  w.configure(bg='#f4f6fa')
+  header=tk.Frame(w,bg='#1d2337',padx=20,pady=12);header.pack(fill='x')
+  tk.Label(header,text='鬧鐘與外觀設定',font=('Microsoft JhengHei',15,'bold'),fg='#f3d393',bg='#1d2337').pack(anchor='w')
+  f=ttk.Frame(w,padding=20);f.pack(fill='both',expand=True)
   minutes=tk.StringVar(value=str(self.cfg['minutes']));seconds=tk.StringVar(value=str(self.cfg.get('seconds',0)));topic=tk.StringVar(value=self.cfg['topic']);gif=tk.StringVar(value=self.cfg['gif']);idle=tk.StringVar(value=self.cfg.get('idle_gif',''));window_scale=tk.StringVar(value=str(self.cfg.get('window_scale',100)));character_scale=tk.StringVar(value=str(self.cfg.get('character_scale',100)));notify=tk.BooleanVar(value=self.cfg['notify']);sound=tk.BooleanVar(value=self.cfg['sound']);top=tk.BooleanVar(value=self.cfg['topmost'])
   for r,(label,var) in enumerate([('專注時間（分鐘）',minutes),('ntfy 主題',topic),('提醒 GIF / 圖片',gif),('常駐 GIF / 圖片',idle)]):
    ttk.Label(f,text=label).grid(row=r,column=0,sticky='w',pady=4);ttk.Entry(f,textvariable=var,width=38).grid(row=r,column=1,sticky='ew')
@@ -285,7 +294,6 @@ class App:
    changed=(m,sec)!=(self.cfg['minutes'],self.cfg.get('seconds',0));self.cfg.update(minutes=m,seconds=sec,topic=t,gif=p,idle_gif=idlepath,window_scale=ws,character_scale=cs,messages=messages,notify=notify.get(),sound=sound.get(),topmost=top.get());self.root.attributes('-topmost',top.get());self.update_window_size();self.set_idle(idlepath);self.save()
    if changed:self.reset()
    w.destroy()
-  ttk.Button(f,text='Google Calendar 設定',command=self.calendar.settings).grid(row=11,column=0,columnspan=2,pady=10)
   ttk.Button(f,text='儲存',command=apply).grid(row=11,column=3,pady=10)
  def show_alarm(self,actual,message=None):
   if message is None:

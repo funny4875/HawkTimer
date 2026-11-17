@@ -5,5 +5,5 @@ $python = Join-Path $PSScriptRoot '.venv\Scripts\python.exe'
 if ($LASTEXITCODE -ne 0) { throw 'PyInstaller failed' }
 $exe = Join-Path $PSScriptRoot 'dist\HawkTimer.exe'
 $icon = Join-Path $PSScriptRoot 'assets\icon.ico'
-& wix build -arch x64 -d "ExePath=$exe" -d "IconPath=$icon" installer.wxs -o 'dist\HawkTimer-1.4.0-x64.msi'
+& wix build -arch x64 -d "ExePath=$exe" -d "IconPath=$icon" installer.wxs -o 'dist\HawkTimer-1.4.1-x64.msi'
 if ($LASTEXITCODE -ne 0) { throw 'WiX build failed' }

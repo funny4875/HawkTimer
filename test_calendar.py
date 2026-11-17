@@ -18,7 +18,7 @@ class Tests(unittest.TestCase):
   payload='測試'.encode();self.assertEqual(s.protect(s.protect(payload),True),payload)
  def test_multiple_calendars_and_partial_failure(self):
   now=datetime.datetime.now().astimezone()
-  with patch.object(s,'account_list',return_value=[('a','a@example.com'),('b','b@example.com')]), patch.object(s,'load_credentials',side_effect=[('a@example.com',object()),ValueError('失效')]),patch.object(s,'build',return_value=Fake()):
+  with patch.object(s,'feed_list',return_value=[]), patch.object(s,'account_list',return_value=[('a','a@example.com'),('b','b@example.com')]), patch.object(s,'load_credentials',side_effect=[('a@example.com',object()),ValueError('失效')]),patch.object(s,'build',return_value=Fake()):
    events,errors=s.events_between(now,now+datetime.timedelta(days=7))
   self.assertEqual([x['title'] for x in events],['會議','全天']);self.assertTrue(events[1]['all_day']);self.assertIn('b@example.com',errors[0])
 if __name__=='__main__':unittest.main()
@@ -69,7 +69,7 @@ class AuthorizationTests(unittest.TestCase):
     self.assertEqual(s.read_private(path)['credential']['refresh_token'],'synthetic-token')
  def test_network_client_has_timeout(self):
   now=datetime.datetime.now().astimezone()
-  with patch.object(s,'account_list',return_value=[('a','a@example.com')]),patch.object(s,'load_credentials',return_value=('a@example.com',object())),patch.object(s.httplib2,'Http') as http,patch.object(s,'AuthorizedHttp',return_value=object()),patch.object(s,'build',return_value=Fake()):
+  with patch.object(s,'feed_list',return_value=[]),patch.object(s,'account_list',return_value=[('a','a@example.com')]),patch.object(s,'load_credentials',return_value=('a@example.com',object())),patch.object(s.httplib2,'Http') as http,patch.object(s,'AuthorizedHttp',return_value=object()),patch.object(s,'build',return_value=Fake()):
    s.events_between(now,now+datetime.timedelta(days=1));http.assert_called_once_with(timeout=20)
 
 class IcalTests(unittest.TestCase):
@@ -83,9 +83,9 @@ class IcalTests(unittest.TestCase):
   class Opener:
    def open(self,*args,**kwargs):return Resp()
   with tempfile.TemporaryDirectory() as d,patch.object(s,'DIR',d),patch.object(s.urllib.request,'build_opener',return_value=Opener()):
-   path=s.add_feed('測試','https://calendar.google.com/calendar/ical/test/private-abc/basic.ics')
+   path=s.add_feed('https://calendar.google.com/calendar/ical/test%40example.com/private-abc/basic.ics')
    now=datetime.datetime(2026,11,17,tzinfo=datetime.timezone.utc);events=s.feed_events(path,now,now+datetime.timedelta(days=4))
-   self.assertEqual(len(events),3);self.assertEqual(sum(e['title']=='Daily Test' for e in events),2);self.assertEqual(sum(e['all_day'] for e in events),1)
+   self.assertEqual(s.feed_list()[0][1],'test@example.com');self.assertEqual(len(events),3);self.assertEqual(sum(e['title']=='Daily Test' for e in events),2);self.assertEqual(sum(e['all_day'] for e in events),1)
    with open(path,'rb') as f:self.assertNotIn(b'private-abc',f.read())
  def test_invalid_host_rejected(self):
-  with self.assertRaises(ValueError):s.add_feed('測試','https://example.org/calendar/ical/test.ics')
+  with self.assertRaises(ValueError):s.add_feed('https://example.org/calendar/ical/test.ics')

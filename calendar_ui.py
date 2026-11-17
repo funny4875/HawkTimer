@@ -22,51 +22,48 @@ class CalendarUI:
    except Exception as e:self.queue.put((kind,None,str(e)))
   threading.Thread(target=work,daemon=True).start()
  def settings(self):
-  w=tk.Toplevel(self.app.root);w.title('Google Calendar 設定');w.iconbitmap(self.app.root.iconbitmap());w.geometry('700x430')
-  f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True)
-  ttk.Label(f,text='可新增 Google 日曆 iCal 網址，或匯入 OAuth JSON 後登入帳號。',wraplength=650).pack(anchor='w')
-  listing=tk.Listbox(f,height=7);listing.pack(fill='both',expand=True,pady=8)
+  w=tk.Toplevel(self.app.root);w.title('Google 日曆設定');w.iconbitmap(self.app.icon_path);w.transient(self.app.root);w.configure(bg='#f4f6fa');w.geometry('670x460');w.minsize(600,410)
+  header=tk.Frame(w,bg='#1d2337',padx=22,pady=16);header.pack(fill='x')
+  tk.Label(header,text='Google 日曆',font=('Microsoft JhengHei',16,'bold'),fg='#f3d393',bg='#1d2337').pack(anchor='w')
+  tk.Label(header,text='使用 iCal 非公開網址加入日曆',font=('Microsoft JhengHei',10),fg='#d8dfeb',bg='#1d2337').pack(anchor='w',pady=(4,0))
+  f=ttk.Frame(w,padding=(22,16));f.pack(fill='both',expand=True)
+  ttk.Label(f,text='已加入的日曆',font=('Microsoft JhengHei',11,'bold')).pack(anchor='w')
+  listing=tk.Listbox(f,height=6,font=('Microsoft JhengHei',11),selectmode='browse',exportselection=False,relief='solid',borderwidth=1,selectbackground='#52658b',activestyle='none');listing.pack(fill='both',expand=True,pady=(8,8))
+  def entries():return [('iCal',p,n) for p,n in service.feed_list()]+[('舊版 OAuth',p,n) for p,n in service.account_list()]
   def refresh():
    listing.delete(0,'end')
-   for path,email in service.account_list():listing.insert('end','Google 帳號：'+email)
-   for path,name in service.feed_list():listing.insert('end','iCal 日曆：'+name)
+   for kind,path,name in entries():listing.insert('end',name+'（'+kind+'）')
   refresh()
   row=ttk.Frame(f);row.pack(fill='x')
-  def load():
-   path=filedialog.askopenfilename(parent=w,title='選擇 OAuth 用戶端設定檔',filetypes=[('JSON','*.json')])
-   if path:
-    try:service.import_client(path);messagebox.showinfo('匯入完成','OAuth 設定檔已安全儲存。',parent=w)
-    except Exception as e:messagebox.showerror('匯入失敗',str(e),parent=w)
-  def add():
-   if not os.path.exists(os.path.join(service.DIR,'client.dat')):messagebox.showwarning('尚未匯入','請先匯入 OAuth 設定檔。',parent=w);return
-   add_btn.config(state='disabled');self.task('add',service.add_account)
   def remove():
-   sel=listing.curselection();accounts=service.account_list()+service.feed_list()
-   if sel and sel[0]<len(accounts) and messagebox.askyesno('移除帳號','確定移除本機儲存的 '+accounts[sel[0]][1]+'？',parent=w):
-    try:os.remove(accounts[sel[0]][0]);refresh()
-    except OSError as e:messagebox.showerror('移除失敗',str(e),parent=w)
+   selected=listing.curselection();items=entries()
+   if not selected or selected[0]>=len(items):messagebox.showinfo('選取日曆','請先選取要刪除的日曆。',parent=w);return
+   _,path,name=items[selected[0]]
+   if messagebox.askyesno('刪除日曆','確定刪除「'+name+'」在此電腦上的連結？',parent=w):
+    try:os.remove(path);refresh()
+    except OSError as e:messagebox.showerror('刪除失敗',str(e),parent=w)
   def add_ical():
-   dialog=tk.Toplevel(w);dialog.title('新增 iCal 日曆');dialog.iconbitmap(self.app.root.iconbitmap());dialog.transient(w)
-   frame=ttk.Frame(dialog,padding=15);frame.pack(fill='both',expand=True)
-   name=tk.StringVar();url=tk.StringVar()
-   ttk.Label(frame,text='日曆名稱').grid(row=0,column=0,sticky='w');ttk.Entry(frame,textvariable=name,width=50).grid(row=0,column=1,pady=5)
-   ttk.Label(frame,text='iCal 網址').grid(row=1,column=0,sticky='w');ttk.Entry(frame,textvariable=url,width=50,show='•').grid(row=1,column=1,pady=5)
-   ttk.Label(frame,text='請貼上 Google 日曆「非公開網址 (iCal 格式)」。網址將由 Windows 加密保存。',wraplength=480).grid(row=2,column=0,columnspan=2,pady=8)
+   dialog=tk.Toplevel(w);dialog.title('新增 Google 日曆');dialog.iconbitmap(self.app.icon_path);dialog.transient(w);dialog.configure(bg='#f4f6fa');dialog.resizable(False,False)
+   frame=ttk.Frame(dialog,padding=20);frame.pack(fill='both',expand=True)
+   ttk.Label(frame,text='貼上 iCal 非公開網址',font=('Microsoft JhengHei',12,'bold')).grid(row=0,column=0,sticky='w')
+   ttk.Label(frame,text='帳號名稱會從網址自動取得；網址會在此電腦加密保存。',wraplength=500).grid(row=1,column=0,sticky='w',pady=(6,10))
+   url=tk.StringVar();entry=ttk.Entry(frame,textvariable=url,width=66,show='•');entry.grid(row=2,column=0,sticky='ew');entry.focus_set()
    def save_feed():
-    try:service.add_feed(name.get(),url.get());refresh();dialog.destroy()
+    try:service.add_feed(url.get());refresh();dialog.destroy()
     except Exception as e:messagebox.showerror('新增失敗',str(e),parent=dialog)
-   ttk.Button(frame,text='新增',command=save_feed).grid(row=3,column=1,sticky='e')
-  ttk.Button(row,text='新增 iCal 日曆',command=add_ical).pack(side='left',padx=2)
-  ttk.Button(row,text='匯入 OAuth 設定檔',command=load).pack(side='left',padx=2)
-  add_btn=ttk.Button(row,text='新增／重新授權帳號',command=add);add_btn.pack(side='left',padx=2)
-  ttk.Button(row,text='移除帳號',command=remove).pack(side='left',padx=2)
+   buttons=ttk.Frame(frame);buttons.grid(row=3,column=0,sticky='e',pady=(14,0))
+   ttk.Button(buttons,text='取消',command=dialog.destroy).pack(side='left',padx=4);ttk.Button(buttons,text='新增日曆',command=save_feed).pack(side='left',padx=4)
+   dialog.bind('<Return>',lambda e:save_feed())
+  ttk.Button(row,text='＋ 新增 iCal 日曆',command=add_ical).pack(side='left',padx=(0,8))
+  ttk.Button(row,text='刪除選取的日曆',command=remove).pack(side='left')
   mobile=tk.BooleanVar(value=self.app.cfg.get('calendar_notify',False))
-  def set_mobile():self.app.cfg['calendar_notify']=mobile.get();self.app.save()
-  ttk.Checkbutton(f,text='行程開始前 10 分鐘也發送手機通知',variable=mobile,command=set_mobile).pack(anchor='w',pady=8)
+  def set_mobile():
+   try:self.app.cfg['calendar_notify']=mobile.get();self.app.save()
+   except OSError as error:messagebox.showwarning('設定儲存失敗',str(error),parent=w)
+  ttk.Checkbutton(f,text='行程開始前 10 分鐘也發送手機通知',variable=mobile,command=set_mobile).pack(anchor='w',pady=(14,6))
   ttk.Button(f,text='查詢行程／空閒時段',command=self.query).pack(anchor='w')
-  self.settings_window=w;self.refresh_accounts=refresh;self.add_button=add_btn
  def query(self):
-  w=tk.Toplevel(self.app.root);w.title('行程與時間區段查詢');w.iconbitmap(self.app.root.iconbitmap());w.geometry('720x500')
+  w=tk.Toplevel(self.app.root);w.title('行程與時間區段查詢');w.iconbitmap(self.app.icon_path);w.geometry('720x500')
   f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True);now=datetime.datetime.now().astimezone()
   start=tk.StringVar(value=now.strftime('%Y-%m-%d %H:%M'));end=tk.StringVar(value=(now+datetime.timedelta(days=1)).strftime('%Y-%m-%d %H:%M'))
   ttk.Label(f,text='開始（YYYY-MM-DD HH:MM）').grid(row=0,column=0,sticky='w');ttk.Entry(f,textvariable=start,width=20).grid(row=0,column=1,padx=5)
@@ -85,7 +82,7 @@ class CalendarUI:
    self.task('query',fetch)
   button=ttk.Button(f,text='查詢',command=search);button.grid(row=0,column=4,padx=4)
  def show(self,title,lines):
-  w=tk.Toplevel(self.app.root);w.title(title);w.iconbitmap(self.app.root.iconbitmap());w.attributes('-topmost',True);w.geometry('700x420')
+  w=tk.Toplevel(self.app.root);w.title(title);w.iconbitmap(self.app.icon_path);w.attributes('-topmost',True);w.geometry('700x420')
   text=tk.Text(w,wrap='word',font=('Microsoft JhengHei',12));scroll=ttk.Scrollbar(w,command=text.yview);text.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');text.pack(fill='both',expand=True);text.insert('1.0',lines);text.configure(state='disabled')
  def poll(self):
   if not self.busy and (service.account_paths() or service.feed_paths()):

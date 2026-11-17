@@ -68,20 +68,30 @@ def feed_paths():
 def feed_list():
  result=[]
  for path in feed_paths():
-  try:result.append((path,read_private(path)['name']))
+  try:
+   feed=read_private(path);result.append((path,feed_name(feed['url'])))
   except Exception:result.append((path,'無法讀取的日曆'))
  return result
-def add_feed(name,url):
- name=name.strip();url=url.strip();parsed=urllib.parse.urlsplit(url)
- if not name:raise ValueError('請輸入日曆名稱。')
+def feed_name(url):
+ parsed=urllib.parse.urlsplit(url.strip())
  if parsed.scheme!='https' or parsed.hostname!='calendar.google.com' or parsed.username or parsed.password or parsed.port not in (None,443) or not parsed.path.startswith('/calendar/ical/'):
   raise ValueError('請貼上 Google 日曆的 HTTPS iCal 網址。')
+ parts=parsed.path.split('/')
+ if len(parts)<5 or not parts[3]:raise ValueError('網址中找不到日曆帳號或識別碼。')
+ identifier=urllib.parse.unquote(parts[3]).strip()
+ if not identifier or any(ord(c)<32 for c in identifier):raise ValueError('網址中的日曆識別碼無效。')
+ return identifier
+
+def add_feed(url):
+ url=url.strip();name=feed_name(url)
+ for path,_ in feed_list():
+  if read_private(path).get('url')==url:raise ValueError('此 iCal 網址已經加入。')
  path=os.path.join(DIR,'feed-'+uuid.uuid4().hex+'.dat')
  write_private(path,{'name':name,'url':url});return path
 class NoRedirect(urllib.request.HTTPRedirectHandler):
  def redirect_request(self,req,fp,code,msg,headers,newurl):return None
 def feed_events(path,start,end):
- feed=read_private(path);url=feed['url'];parsed=urllib.parse.urlsplit(url)
+ feed=read_private(path);url=feed['url'];feed['name']=feed_name(url);parsed=urllib.parse.urlsplit(url)
  if parsed.scheme!='https' or parsed.hostname!='calendar.google.com' or parsed.username or parsed.password or parsed.port not in (None,443) or not parsed.path.startswith('/calendar/ical/'):
   raise ValueError('網址格式不正確。')
  opener=urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)))
