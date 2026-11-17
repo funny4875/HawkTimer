@@ -105,3 +105,28 @@ class QueryDateTests(unittest.TestCase):
   from calendar_ui import query_dates
   for start,end in [('',''),('2026-02-30',''),('2026-11-17','2026-11-16'),('2026-11-17','9999-12-31')]:
    with self.subTest(start=start,end=end),self.assertRaises(ValueError):query_dates(start,end)
+
+class BrowserGuideTests(unittest.TestCase):
+ def test_clicks_only_verified_copy_button(self):
+  import calendar_browser as browser
+  class Element:
+   def __init__(self,label):self.label=label;self.clicked=False
+   def is_displayed(self):return True
+   def is_enabled(self):return True
+   def click(self):self.clicked=True
+   def find_element(self,*args):return self
+   def get_attribute(self,name):return self.label if name=='aria-label' else ''
+  class Driver:
+   def __init__(self,label):self.first=Element('first');self.second=Element(label);self.service=self
+   def get(self,url):pass
+   def find_element(self,by,xpath):return self.first if xpath==browser.FIRST else self.second
+   def quit(self):pass
+   def stop(self):pass
+  for label,allowed in [('複製到剪貼簿',True),('刪除日曆',False)]:
+   d=Driver(label)
+   with self.subTest(label=label),patch.object(browser.time,'sleep') as sleep:
+    if allowed:browser.obtain_ical(driver_factory=lambda **kw:d)
+    else:
+     with self.assertRaises(ValueError):browser.obtain_ical(driver_factory=lambda **kw:d)
+    self.assertTrue(d.first.clicked);self.assertEqual(d.second.clicked,allowed)
+    self.assertEqual(sleep.call_count,2 if allowed else 1)
