@@ -117,7 +117,8 @@ class BrowserGuideTests(unittest.TestCase):
    def find_element(self,*args):return self
    def get_attribute(self,name):return self.label if name=='aria-label' else ''
   class Driver:
-   def __init__(self,label):self.first=Element('first');self.second=Element(label);self.service=self
+   def __init__(self,label):self.first=Element('first');self.second=Element(label);self.service=self;self.current_url='https://calendar.google.com/calendar/u/0/r/settings'
+   def find_elements(self,*args):return []
    def get(self,url):pass
    def find_element(self,by,xpath):return self.first if xpath==browser.FIRST else self.second
    def quit(self):pass
@@ -130,3 +131,28 @@ class BrowserGuideTests(unittest.TestCase):
      with self.assertRaises(ValueError):browser.obtain_ical(driver_factory=lambda **kw:d)
     self.assertTrue(d.first.clicked);self.assertEqual(d.second.clicked,allowed)
     self.assertEqual(sleep.call_count,2 if allowed else 1)
+
+class CalendarReadyTests(unittest.TestCase):
+ def test_signin_page_is_never_automated(self):
+  import calendar_browser as b
+  from types import SimpleNamespace
+  d=SimpleNamespace(current_url='https://accounts.google.com/signin',find_elements=lambda *args: self.fail('must not inspect login page'))
+  self.assertFalse(b.calendar_ready(d))
+ def test_only_safe_dismiss_buttons_clicked(self):
+  import calendar_browser as b
+  class Button:
+   def __init__(self,label):self.text=label;self.clicked=False
+   def get_attribute(self,name):return ''
+   def is_displayed(self):return True
+   def is_enabled(self):return True
+   def click(self):self.clicked=True
+  class Dialog:
+   def __init__(self,buttons):self.buttons=buttons
+   def is_displayed(self):return True
+   def find_elements(self,*args):return self.buttons
+  class Driver:
+   current_url='https://calendar.google.com/calendar/u/0/r'
+   def __init__(self,buttons):self.buttons=buttons
+   def find_elements(self,*args):return [Dialog(self.buttons)]
+  unsafe=Button('刪除');safe=Button('稍後再說');d=Driver([unsafe,safe])
+  self.assertFalse(b.calendar_ready(d));self.assertFalse(unsafe.clicked);self.assertTrue(safe.clicked)
