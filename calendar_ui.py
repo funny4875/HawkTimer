@@ -82,10 +82,14 @@ class CalendarUI:
   ttk.Label(f,text='結束日期').grid(row=0,column=2);ttk.Entry(f,textvariable=end,width=14).grid(row=0,column=3,padx=5)
   ttk.Label(f,text='結束日期留白時，預設為開始日期的一個月後；查詢包含結束日期當天。').grid(row=1,column=0,columnspan=5,sticky='w',pady=(8,0))
   result=tk.Text(f,wrap='word');result.grid(row=2,column=0,columnspan=5,sticky='nsew',pady=10);f.rowconfigure(2,weight=1);f.columnconfigure(3,weight=1)
-  def search():
+  def search(auto=False):
+   if not w.winfo_exists():return
    try:
     a,b,end_date=query_dates(start.get(),end.get())
-    if not service.account_paths() and not service.feed_paths():raise ValueError('請先在設定中新增日曆或連結帳號。')
+    if not service.account_paths() and not service.feed_paths():
+     if auto:
+      result.delete('1.0','end');result.insert('end','請先在設定中新增日曆，再查看行程。');return
+     raise ValueError('請先在設定中新增日曆或連結帳號。')
    except ValueError as e:messagebox.showwarning('查詢條件',str(e),parent=w);return
    span=f'查詢日期：{a.date().isoformat()} 至 {end_date.isoformat()}（包含結束日期）'
    button.config(state='disabled');result.delete('1.0','end');result.insert('end',span+'\n\n查詢中…')
@@ -94,6 +98,7 @@ class CalendarUI:
     except Exception as error:return (w,result,button,span,([], [str(error)]))
    self.task('query',fetch)
   button=ttk.Button(f,text='查詢',command=search);button.grid(row=0,column=4,padx=4)
+  w.after(0,lambda:search(True))
  def show(self,title,lines):
   w=tk.Toplevel(self.app.root);w.title(title);w.iconbitmap(self.app.icon_path);w.attributes('-topmost',True);w.geometry('700x420')
   text=tk.Text(w,wrap='word',font=('Microsoft JhengHei',12));scroll=ttk.Scrollbar(w,command=text.yview);text.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');text.pack(fill='both',expand=True);text.insert('1.0',lines);text.configure(state='disabled')
