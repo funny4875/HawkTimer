@@ -6,6 +6,8 @@ from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 import httplib2
 from google_auth_httplib2 import AuthorizedHttp
+import urllib.request, urllib.parse, urllib.error, ssl, truststore
+import icalendar, recurring_ical_events
 
 SCOPES=['https://www.googleapis.com/auth/calendar.readonly','https://www.googleapis.com/auth/userinfo.email','openid']
 DIR=os.path.join(os.environ['APPDATA'],'HawkPomodoro','calendar')
@@ -59,6 +61,59 @@ def load_credentials(path):
   c.refresh(Request());account['credential']=json.loads(c.to_json());write_private(path,account)
  if not c.valid:raise ValueError('授權已失效，請重新連結帳號。')
  return account['email'],c
+
+def feed_paths():
+ if not os.path.isdir(DIR):return []
+ return [os.path.join(DIR,x) for x in sorted(os.listdir(DIR)) if x.startswith('feed-') and x.endswith('.dat')]
+def feed_list():
+ result=[]
+ for path in feed_paths():
+  try:result.append((path,read_private(path)['name']))
+  except Exception:result.append((path,'無法讀取的日曆'))
+ return result
+def add_feed(name,url):
+ name=name.strip();url=url.strip();parsed=urllib.parse.urlsplit(url)
+ if not name:raise ValueError('請輸入日曆名稱。')
+ if parsed.scheme!='https' or parsed.hostname!='calendar.google.com' or parsed.username or parsed.password or parsed.port not in (None,443) or not parsed.path.startswith('/calendar/ical/'):
+  raise ValueError('請貼上 Google 日曆的 HTTPS iCal 網址。')
+ path=os.path.join(DIR,'feed-'+uuid.uuid4().hex+'.dat')
+ write_private(path,{'name':name,'url':url});return path
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+ def redirect_request(self,req,fp,code,msg,headers,newurl):return None
+def feed_events(path,start,end):
+ feed=read_private(path);url=feed['url'];parsed=urllib.parse.urlsplit(url)
+ if parsed.scheme!='https' or parsed.hostname!='calendar.google.com' or parsed.username or parsed.password or parsed.port not in (None,443) or not parsed.path.startswith('/calendar/ical/'):
+  raise ValueError('網址格式不正確。')
+ opener=urllib.request.build_opener(NoRedirect(),urllib.request.HTTPSHandler(context=truststore.SSLContext(ssl.PROTOCOL_TLS_CLIENT)))
+ try:
+  with opener.open(urllib.request.Request(url,headers={'User-Agent':'HawkTimer/iCal'}),timeout=20) as response:
+   data=response.read(10*1024*1024+1)
+ except urllib.error.HTTPError as e:
+  if e.code in (403,404):raise ValueError('無法讀取此網址（HTTP %s）。請確認是否使用「非公開網址 (iCal 格式)」。'%e.code) from None
+  raise ValueError('無法讀取日曆（HTTP %s）。'%e.code) from None
+ except (urllib.error.URLError,TimeoutError,OSError):raise ValueError('無法連接 Google 日曆，請檢查網路。') from None
+ if len(data)>10*1024*1024:raise ValueError('日曆資料超過 10 MB。')
+ try:
+  cal=icalendar.Calendar.from_ical(data)
+  if cal.name!='VCALENDAR':raise ValueError('不是日曆資料')
+  entries=recurring_ical_events.of(cal).between(start,end)
+  results=[]
+  for item in entries:
+   if item.name!='VEVENT' or str(item.get('STATUS','')).upper()=='CANCELLED':continue
+   begin=item.decoded('DTSTART');finish=item.decoded('DTEND',None)
+   all_day=isinstance(begin,datetime.date) and not isinstance(begin,datetime.datetime)
+   if all_day:
+    finish=finish or (begin+datetime.timedelta(days=1))
+    begin=datetime.datetime.combine(begin,datetime.time.min).astimezone();finish=datetime.datetime.combine(finish,datetime.time.min).astimezone()
+   else:
+    if begin.tzinfo is None:begin=begin.astimezone()
+    begin=begin.astimezone();finish=(finish or begin).astimezone()
+   if begin>=end or finish<=start:continue
+   ident=str(item.get('UID',''))+'|'+begin.isoformat()
+   results.append({'id':os.path.basename(path)+'|'+ident,'account':feed['name'],'calendar':feed['name'],'title':str(item.get('SUMMARY','（無標題）')),'start':begin,'end':finish,'all_day':all_day})
+  return results
+ except Exception as e:raise ValueError('日曆資料解析失敗：'+type(e).__name__) from None
+
 _events_lock=threading.Lock()
 def events_between(start,end):
  with _events_lock:return _events_between(start,end)
@@ -86,6 +141,9 @@ def _events_between(start,end):
      token=page.get('nextPageToken')
      if not token:break
   except Exception as e:errors.append(email+': '+str(e))
+ for path,name in feed_list():
+  try:results.extend(feed_events(path,start,end))
+  except Exception as e:errors.append(name+': '+str(e))
  return sorted(results,key=lambda e:e['start']),errors
 def describe(event):
  start=event['start'].strftime('%m/%d %H:%M');end=event['end'].strftime('%m/%d %H:%M')

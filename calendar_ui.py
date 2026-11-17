@@ -22,13 +22,14 @@ class CalendarUI:
    except Exception as e:self.queue.put((kind,None,str(e)))
   threading.Thread(target=work,daemon=True).start()
  def settings(self):
-  w=tk.Toplevel(self.app.root);w.title('Google Calendar 設定');w.iconbitmap(self.app.root.iconbitmap());w.geometry('570x350')
+  w=tk.Toplevel(self.app.root);w.title('Google Calendar 設定');w.iconbitmap(self.app.root.iconbitmap());w.geometry('700x430')
   f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True)
-  ttk.Label(f,text='先匯入 Google Cloud 桌面應用程式 OAuth JSON，然後逐一登入帳號。',wraplength=540).pack(anchor='w')
+  ttk.Label(f,text='可新增 Google 日曆 iCal 網址，或匯入 OAuth JSON 後登入帳號。',wraplength=650).pack(anchor='w')
   listing=tk.Listbox(f,height=7);listing.pack(fill='both',expand=True,pady=8)
   def refresh():
    listing.delete(0,'end')
-   for path,email in service.account_list():listing.insert('end',email)
+   for path,email in service.account_list():listing.insert('end','Google 帳號：'+email)
+   for path,name in service.feed_list():listing.insert('end','iCal 日曆：'+name)
   refresh()
   row=ttk.Frame(f);row.pack(fill='x')
   def load():
@@ -40,10 +41,22 @@ class CalendarUI:
    if not os.path.exists(os.path.join(service.DIR,'client.dat')):messagebox.showwarning('尚未匯入','請先匯入 OAuth 設定檔。',parent=w);return
    add_btn.config(state='disabled');self.task('add',service.add_account)
   def remove():
-   sel=listing.curselection();accounts=service.account_list()
+   sel=listing.curselection();accounts=service.account_list()+service.feed_list()
    if sel and sel[0]<len(accounts) and messagebox.askyesno('移除帳號','確定移除本機儲存的 '+accounts[sel[0]][1]+'？',parent=w):
     try:os.remove(accounts[sel[0]][0]);refresh()
     except OSError as e:messagebox.showerror('移除失敗',str(e),parent=w)
+  def add_ical():
+   dialog=tk.Toplevel(w);dialog.title('新增 iCal 日曆');dialog.iconbitmap(self.app.root.iconbitmap());dialog.transient(w)
+   frame=ttk.Frame(dialog,padding=15);frame.pack(fill='both',expand=True)
+   name=tk.StringVar();url=tk.StringVar()
+   ttk.Label(frame,text='日曆名稱').grid(row=0,column=0,sticky='w');ttk.Entry(frame,textvariable=name,width=50).grid(row=0,column=1,pady=5)
+   ttk.Label(frame,text='iCal 網址').grid(row=1,column=0,sticky='w');ttk.Entry(frame,textvariable=url,width=50,show='•').grid(row=1,column=1,pady=5)
+   ttk.Label(frame,text='請貼上 Google 日曆「非公開網址 (iCal 格式)」。網址將由 Windows 加密保存。',wraplength=480).grid(row=2,column=0,columnspan=2,pady=8)
+   def save_feed():
+    try:service.add_feed(name.get(),url.get());refresh();dialog.destroy()
+    except Exception as e:messagebox.showerror('新增失敗',str(e),parent=dialog)
+   ttk.Button(frame,text='新增',command=save_feed).grid(row=3,column=1,sticky='e')
+  ttk.Button(row,text='新增 iCal 日曆',command=add_ical).pack(side='left',padx=2)
   ttk.Button(row,text='匯入 OAuth 設定檔',command=load).pack(side='left',padx=2)
   add_btn=ttk.Button(row,text='新增／重新授權帳號',command=add);add_btn.pack(side='left',padx=2)
   ttk.Button(row,text='移除帳號',command=remove).pack(side='left',padx=2)
@@ -63,7 +76,7 @@ class CalendarUI:
    try:
     a=datetime.datetime.strptime(start.get().strip(),'%Y-%m-%d %H:%M').astimezone();b=datetime.datetime.strptime(end.get().strip(),'%Y-%m-%d %H:%M').astimezone()
     if a>=b:raise ValueError('結束時間必須晚於開始時間。')
-    if not service.account_list():raise ValueError('請先在設定中連結帳號。')
+    if not service.account_paths() and not service.feed_paths():raise ValueError('請先在設定中新增日曆或連結帳號。')
    except ValueError as e:messagebox.showwarning('查詢條件',str(e),parent=w);return
    button.config(state='disabled');result.delete('1.0','end');result.insert('end','查詢中…')
    def fetch():
@@ -75,7 +88,7 @@ class CalendarUI:
   w=tk.Toplevel(self.app.root);w.title(title);w.iconbitmap(self.app.root.iconbitmap());w.attributes('-topmost',True);w.geometry('700x420')
   text=tk.Text(w,wrap='word',font=('Microsoft JhengHei',12));scroll=ttk.Scrollbar(w,command=text.yview);text.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');text.pack(fill='both',expand=True);text.insert('1.0',lines);text.configure(state='disabled')
  def poll(self):
-  if not self.busy and service.account_paths():
+  if not self.busy and (service.account_paths() or service.feed_paths()):
    self.busy=True
    now=datetime.datetime.now().astimezone();end=now+datetime.timedelta(days=7)
    self.task('poll',lambda:(now,service.events_between(now,end)))

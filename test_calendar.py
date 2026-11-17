@@ -71,3 +71,21 @@ class AuthorizationTests(unittest.TestCase):
   now=datetime.datetime.now().astimezone()
   with patch.object(s,'account_list',return_value=[('a','a@example.com')]),patch.object(s,'load_credentials',return_value=('a@example.com',object())),patch.object(s.httplib2,'Http') as http,patch.object(s,'AuthorizedHttp',return_value=object()),patch.object(s,'build',return_value=Fake()):
    s.events_between(now,now+datetime.timedelta(days=1));http.assert_called_once_with(timeout=20)
+
+class IcalTests(unittest.TestCase):
+ def test_recurrence_exclusion_and_encrypted_feed(self):
+  import tempfile
+  ics=b'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Test//EN\r\nBEGIN:VEVENT\r\nUID:repeat-1\r\nDTSTART:20261117T090000Z\r\nDTEND:20261117T100000Z\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEXDATE:20261118T090000Z\r\nSUMMARY:Daily Test\r\nEND:VEVENT\r\nBEGIN:VEVENT\r\nUID:day-1\r\nDTSTART;VALUE=DATE:20261118\r\nDTEND;VALUE=DATE:20261119\r\nSUMMARY:All day\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n'
+  class Resp:
+   def __enter__(self):return self
+   def __exit__(self,*args):pass
+   def read(self,n):return ics
+  class Opener:
+   def open(self,*args,**kwargs):return Resp()
+  with tempfile.TemporaryDirectory() as d,patch.object(s,'DIR',d),patch.object(s.urllib.request,'build_opener',return_value=Opener()):
+   path=s.add_feed('測試','https://calendar.google.com/calendar/ical/test/private-abc/basic.ics')
+   now=datetime.datetime(2026,11,17,tzinfo=datetime.timezone.utc);events=s.feed_events(path,now,now+datetime.timedelta(days=4))
+   self.assertEqual(len(events),3);self.assertEqual(sum(e['title']=='Daily Test' for e in events),2);self.assertEqual(sum(e['all_day'] for e in events),1)
+   with open(path,'rb') as f:self.assertNotIn(b'private-abc',f.read())
+ def test_invalid_host_rejected(self):
+  with self.assertRaises(ValueError):s.add_feed('測試','https://example.org/calendar/ical/test.ics')
