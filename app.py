@@ -10,7 +10,7 @@ CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
 DEFAULT={'calendar_notify':False,'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
-APP_VERSION='1.4.3'
+APP_VERSION='1.4.4'
 RELEASE_API='https://api.github.com/repos/funny4875/HawkTimer/releases/latest'
 def read_config():
  try:

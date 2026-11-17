@@ -63,6 +63,22 @@ class CalendarUI:
    def save_feed():
     try:service.add_feed(url.get());refresh();dialog.destroy()
     except Exception as e:messagebox.showerror('新增失敗',str(e),parent=dialog)
+   def auto_ical():
+    import calendar_browser
+    if getattr(self,'browser_busy',False):return
+    messagebox.showinfo('自動取得 iCal 網址','接下來會開啟 Chrome。請自行登入 Google 帳號，登入完成後程式會嘗試自動複製網址。\n\n若網頁版面不同，可自行在 Chrome 複製非公開 iCal 網址，再回到此視窗貼上。',parent=dialog)
+    self.browser_busy=True;auto_button.config(state='disabled')
+    try:before=dialog.clipboard_get()
+    except tk.TclError:before=''
+    was_topmost=bool(self.app.root.attributes('-topmost'))
+    self.app.root.attributes('-topmost',False);dialog.withdraw();w.withdraw()
+    def run_browser():
+     try:calendar_browser.obtain_ical();error=None
+     except ValueError as exc:error=str(exc)
+     except Exception:error='無法完成自動取得。請確認 Chrome 已安裝、網路正常，並在瀏覽器自行登入後手動複製非公開 iCal 網址。'
+     return (dialog,w,url,auto_button,before,was_topmost,error)
+    self.task('browser',run_browser)
+   auto_button=ttk.Button(frame,text='自動取得',command=auto_ical);auto_button.grid(row=3,column=0,sticky='w',pady=(14,0))
    buttons=ttk.Frame(frame);buttons.grid(row=3,column=0,sticky='e',pady=(14,0))
    ttk.Button(buttons,text='取消',command=dialog.destroy).pack(side='left',padx=4);ttk.Button(buttons,text='新增日曆',command=save_feed).pack(side='left',padx=4)
    dialog.bind('<Return>',lambda e:save_feed())
@@ -112,7 +128,23 @@ class CalendarUI:
   try:
    while True:
     kind,value,error=self.queue.get_nowait()
-    if kind=='add':
+    if kind=='browser':
+     self.browser_busy=False
+     if error:messagebox.showerror('自動取得失敗',error,parent=self.app.root);continue
+     dialog,w,url,button,before,topmost,problem=value
+     self.app.root.attributes('-topmost',topmost)
+     if not dialog.winfo_exists():continue
+     if w.winfo_exists():w.deiconify()
+     dialog.deiconify();dialog.lift();button.config(state='normal')
+     if problem:messagebox.showwarning('自動取得失敗',problem,parent=dialog);continue
+     try:
+      copied=dialog.clipboard_get()
+      service.feed_name(copied)
+      if '/private-' not in copied:raise ValueError('不是非公開 iCal 網址。')
+      if copied==before:raise ValueError('剪貼簿內容未更新，請手動複製非公開網址。')
+      url.set(copied)
+     except (tk.TclError,ValueError):messagebox.showwarning('未取得網址','無法確認複製的 iCal 網址，請手動貼上非公開網址。',parent=dialog)
+    elif kind=='add':
      if hasattr(self,'settings_window') and self.settings_window.winfo_exists():
       self.add_button.config(state='normal');self.refresh_accounts()
      if error:messagebox.showerror('帳號連結失敗',error,parent=self.app.root)
