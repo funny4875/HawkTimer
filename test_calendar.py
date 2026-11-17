@@ -89,3 +89,19 @@ class IcalTests(unittest.TestCase):
    with open(path,'rb') as f:self.assertNotIn(b'private-abc',f.read())
  def test_invalid_host_rejected(self):
   with self.assertRaises(ValueError):s.add_feed('https://example.org/calendar/ical/test.ics')
+
+class QueryDateTests(unittest.TestCase):
+ def test_blank_end_is_calendar_month_with_last_day_clamping(self):
+  from calendar_ui import query_dates
+  start,end,shown=query_dates('2024-01-31','')
+  self.assertEqual((start.date(),shown,end.date()),(datetime.date(2024,1,31),datetime.date(2024,2,29),datetime.date(2024,3,1)))
+  start,end,shown=query_dates('2025-12-15','')
+  self.assertEqual((shown,end.date()),(datetime.date(2026,1,15),datetime.date(2026,1,16)))
+ def test_selected_end_day_is_included_and_same_day_allowed(self):
+  from calendar_ui import query_dates
+  start,end,shown=query_dates('2026-11-17','2026-11-17')
+  self.assertEqual(start.date(),datetime.date(2026,11,17));self.assertEqual(end.date(),datetime.date(2026,11,18))
+ def test_invalid_and_reversed_dates(self):
+  from calendar_ui import query_dates
+  for start,end in [('',''),('2026-02-30',''),('2026-11-17','2026-11-16'),('2026-11-17','9999-12-31')]:
+   with self.subTest(start=start,end=end),self.assertRaises(ValueError):query_dates(start,end)

@@ -1,6 +1,18 @@
 import os, json, queue, threading, datetime, tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import calendar_service as service
+from dateutil.relativedelta import relativedelta
+
+def query_dates(start_text,end_text):
+ try:
+  start=datetime.date.fromisoformat(start_text.strip())
+  end=datetime.date.fromisoformat(end_text.strip()) if end_text.strip() else start+relativedelta(months=1)
+  if end<start:raise ValueError('結束日期不可早於開始日期。')
+  after_end=end+datetime.timedelta(days=1)
+  return (datetime.datetime.combine(start,datetime.time.min).astimezone(),datetime.datetime.combine(after_end,datetime.time.min).astimezone(),end)
+ except (ValueError,OverflowError) as error:
+  if str(error)=='結束日期不可早於開始日期。':raise
+  raise ValueError('請輸入有效日期，格式為 YYYY-MM-DD。') from None
 
 class CalendarUI:
  def __init__(self, app):
@@ -64,21 +76,22 @@ class CalendarUI:
   ttk.Button(f,text='查詢行程／空閒時段',command=self.query).pack(anchor='w')
  def query(self):
   w=tk.Toplevel(self.app.root);w.title('行程與時間區段查詢');w.iconbitmap(self.app.icon_path);w.geometry('720x500')
-  f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True);now=datetime.datetime.now().astimezone()
-  start=tk.StringVar(value=now.strftime('%Y-%m-%d %H:%M'));end=tk.StringVar(value=(now+datetime.timedelta(days=1)).strftime('%Y-%m-%d %H:%M'))
-  ttk.Label(f,text='開始（YYYY-MM-DD HH:MM）').grid(row=0,column=0,sticky='w');ttk.Entry(f,textvariable=start,width=20).grid(row=0,column=1,padx=5)
-  ttk.Label(f,text='結束').grid(row=0,column=2);ttk.Entry(f,textvariable=end,width=20).grid(row=0,column=3,padx=5)
+  f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True);today=datetime.date.today()
+  start=tk.StringVar(value=today.isoformat());end=tk.StringVar(value='')
+  ttk.Label(f,text='開始日期（YYYY-MM-DD）').grid(row=0,column=0,sticky='w');ttk.Entry(f,textvariable=start,width=14).grid(row=0,column=1,padx=5)
+  ttk.Label(f,text='結束日期').grid(row=0,column=2);ttk.Entry(f,textvariable=end,width=14).grid(row=0,column=3,padx=5)
+  ttk.Label(f,text='結束日期留白時，預設為開始日期的一個月後；查詢包含結束日期當天。').grid(row=1,column=0,columnspan=5,sticky='w',pady=(8,0))
   result=tk.Text(f,wrap='word');result.grid(row=2,column=0,columnspan=5,sticky='nsew',pady=10);f.rowconfigure(2,weight=1);f.columnconfigure(3,weight=1)
   def search():
    try:
-    a=datetime.datetime.strptime(start.get().strip(),'%Y-%m-%d %H:%M').astimezone();b=datetime.datetime.strptime(end.get().strip(),'%Y-%m-%d %H:%M').astimezone()
-    if a>=b:raise ValueError('結束時間必須晚於開始時間。')
+    a,b,end_date=query_dates(start.get(),end.get())
     if not service.account_paths() and not service.feed_paths():raise ValueError('請先在設定中新增日曆或連結帳號。')
    except ValueError as e:messagebox.showwarning('查詢條件',str(e),parent=w);return
-   button.config(state='disabled');result.delete('1.0','end');result.insert('end','查詢中…')
+   span=f'查詢日期：{a.date().isoformat()} 至 {end_date.isoformat()}（包含結束日期）'
+   button.config(state='disabled');result.delete('1.0','end');result.insert('end',span+'\n\n查詢中…')
    def fetch():
-    try:return (w,result,button,service.events_between(a,b))
-    except Exception as error:return (w,result,button,([], [str(error)]))
+    try:return (w,result,button,span,service.events_between(a,b))
+    except Exception as error:return (w,result,button,span,([], [str(error)]))
    self.task('query',fetch)
   button=ttk.Button(f,text='查詢',command=search);button.grid(row=0,column=4,padx=4)
  def show(self,title,lines):
@@ -101,10 +114,10 @@ class CalendarUI:
      else:messagebox.showinfo('帳號已連結',value,parent=self.app.root)
     elif kind=='query':
      if error:messagebox.showerror('查詢失敗',error,parent=self.app.root);continue
-     w,result,button,(events,errors)=value
+     w,result,button,span,(events,errors)=value
      if not w.winfo_exists():continue
      button.config(state='normal');result.delete('1.0','end')
-     result.insert('end',(('此區段有行程：\n\n'+'\n'.join(map(service.describe,events))) if events else ('無法確認空閒。' if errors else '此區段沒有行程。'))+('\n\n部分帳號查詢失敗：\n'+'\n'.join(errors) if errors else ''))
+     result.insert('end',span+'\n\n'+(('此區段有行程：\n\n'+'\n'.join(map(service.describe,events))) if events else ('無法確認空閒。' if errors else '此區段沒有行程。'))+('\n\n部分帳號查詢失敗：\n'+'\n'.join(errors) if errors else ''))
     elif kind=='poll':
      self.busy=False
      if error:
