@@ -11,8 +11,11 @@ class CalendarUI:
   except (OSError,ValueError):pass
   app.root.after(1000,self.poll);app.root.after(250,self.process)
  def save_state(self):
-  os.makedirs(service.DIR,exist_ok=True)
-  with open(self.state_path,'w',encoding='utf-8') as f:json.dump({'summary':self.last_summary,'seen':list(self.seen)[-2000:]},f)
+  try:
+   os.makedirs(service.DIR,exist_ok=True)
+   with open(self.state_path,'w',encoding='utf-8') as f:json.dump({'summary':self.last_summary,'seen':list(self.seen)[-2000:]},f)
+  except OSError as error:
+   messagebox.showwarning('行事曆狀態儲存失敗',str(error),parent=self.app.root)
  def task(self,kind,fn):
   def work():
    try:self.queue.put((kind,fn(),None))
@@ -63,7 +66,10 @@ class CalendarUI:
     if not service.account_list():raise ValueError('請先在設定中連結帳號。')
    except ValueError as e:messagebox.showwarning('查詢條件',str(e),parent=w);return
    button.config(state='disabled');result.delete('1.0','end');result.insert('end','查詢中…')
-   self.task('query',lambda:(w,result,button,service.events_between(a,b)))
+   def fetch():
+    try:return (w,result,button,service.events_between(a,b))
+    except Exception as error:return (w,result,button,([], [str(error)]))
+   self.task('query',fetch)
   button=ttk.Button(f,text='查詢',command=search);button.grid(row=0,column=4,padx=4)
  def show(self,title,lines):
   w=tk.Toplevel(self.app.root);w.title(title);w.iconbitmap(self.app.root.iconbitmap());w.attributes('-topmost',True);w.geometry('700x420')
@@ -117,4 +123,4 @@ class CalendarUI:
       if errors:self.partial_summary_date=today
       else:self.last_summary=today;self.save_state()
   except queue.Empty:pass
-  self.app.root.after(250,self.process)
+  finally:self.app.root.after(250,self.process)

@@ -4,6 +4,8 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
+import httplib2
+from google_auth_httplib2 import AuthorizedHttp
 
 SCOPES=['https://www.googleapis.com/auth/calendar.readonly','https://www.googleapis.com/auth/userinfo.email','openid']
 DIR=os.path.join(os.environ['APPDATA'],'HawkPomodoro','calendar')
@@ -46,7 +48,7 @@ def add_account():
  config=read_private(os.path.join(DIR,'client.dat'))
  flow=InstalledAppFlow.from_client_config(config,SCOPES,autogenerate_code_verifier=True)
  cred=flow.run_local_server(port=0,open_browser=True,access_type='offline',prompt='consent',timeout_seconds=180)
- user=build('oauth2','v2',credentials=cred,cache_discovery=False).userinfo().get().execute()
+ user=build('oauth2','v2',http=AuthorizedHttp(cred,http=httplib2.Http(timeout=20)),cache_discovery=False).userinfo().get().execute()
  email=user['email']
  existing=next((p for p,e in account_list() if e.lower()==email.lower()),None)
  write_private(existing or os.path.join(DIR,'account-'+uuid.uuid4().hex+'.dat'),{'email':email,'credential':json.loads(cred.to_json())})
@@ -64,7 +66,7 @@ def _events_between(start,end):
  results=[];errors=[]
  for path,email in account_list():
   try:
-   email,cred=load_credentials(path); service=build('calendar','v3',credentials=cred,cache_discovery=False)
+   email,cred=load_credentials(path); service=build('calendar','v3',http=AuthorizedHttp(cred,http=httplib2.Http(timeout=20)),cache_discovery=False)
    calendars=[]; token=None
    while True:
     page=service.calendarList().list(pageToken=token).execute();calendars.extend(page.get('items',[]));token=page.get('nextPageToken')

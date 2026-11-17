@@ -46,3 +46,28 @@ class SchedulerTests(unittest.TestCase):
  def test_failed_account_is_visible_and_does_not_mark_summary(self):
   ui,messages,_=self.make_ui([],errors=['account failed'])
   self.assertEqual(messages[0][0],'行事曆同步失敗');self.assertEqual(ui.last_summary,'')
+
+class AuthorizationTests(unittest.TestCase):
+ def test_independent_accounts_and_replace_existing(self):
+  import tempfile, json
+  from types import SimpleNamespace
+  class Cred:
+   def to_json(self):return json.dumps({'refresh_token':'synthetic-token'})
+  class Flow:
+   def run_local_server(self,**kw):return Cred()
+  class Userinfo:
+   def __init__(self,email):self.email=email
+   def userinfo(self):return self
+   def get(self):return self
+   def execute(self):return {'email':self.email}
+  with tempfile.TemporaryDirectory() as directory, patch.object(s,'DIR',directory), patch.object(s.InstalledAppFlow,'from_client_config',return_value=Flow()), patch.object(s,'AuthorizedHttp',return_value=object()), patch.object(s,'build',side_effect=[Userinfo('a@example.com'),Userinfo('b@example.com'),Userinfo('a@example.com')]):
+   s.write_private(os.path.join(directory,'client.dat'),{'installed':{'client_id':'test'}})
+   for _ in range(3):s.add_account()
+   accounts=s.account_list();self.assertEqual(sorted(email for _,email in accounts),['a@example.com','b@example.com'])
+   for path,_ in accounts:
+    with open(path,'rb') as stream:self.assertNotIn(b'synthetic-token',stream.read())
+    self.assertEqual(s.read_private(path)['credential']['refresh_token'],'synthetic-token')
+ def test_network_client_has_timeout(self):
+  now=datetime.datetime.now().astimezone()
+  with patch.object(s,'account_list',return_value=[('a','a@example.com')]),patch.object(s,'load_credentials',return_value=('a@example.com',object())),patch.object(s.httplib2,'Http') as http,patch.object(s,'AuthorizedHttp',return_value=object()),patch.object(s,'build',return_value=Fake()):
+   s.events_between(now,now+datetime.timedelta(days=1));http.assert_called_once_with(timeout=20)
