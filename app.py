@@ -1,4 +1,5 @@
 import os, sys, json, time, math, threading, urllib.request, re, winsound, random, ssl, truststore, queue, pystray
+import calendar_ui
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk, ImageSequence
@@ -7,9 +8,9 @@ ICON=os.path.join(BASE,'icon.ico' if getattr(sys,'frozen',False) else 'assets/ic
 CONFIG_DIR=os.path.join(os.environ.get('APPDATA',os.path.expanduser('~')),'HawkPomodoro')
 CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
-DEFAULT={'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
+DEFAULT={'calendar_notify':False,'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
-APP_VERSION='1.2.1'
+APP_VERSION='1.3.0'
 RELEASE_API='https://api.github.com/repos/funny4875/HawkTimer/releases/latest'
 def read_config():
  try:
@@ -79,6 +80,7 @@ class App:
   self.running=False; self.end=0; self.remaining=int(self.cfg['minutes'])*60+int(self.cfg.get('seconds',0)); self.alarm=None
   self.tray_icon=None;self.tray_hidden=False;self.tray_starting=False;self.tray_events=queue.Queue()
   self.update_events=queue.Queue();self.update_checking=False;self.pending_update=None
+  self.calendar=calendar_ui.CalendarUI(self)
   self.canvas=tk.Canvas(self.root,width=360,height=385,bg=KEY,highlightthickness=0); self.canvas.pack()
   self.idle_item=self.canvas.create_image(180,190); self.idle_job=None; self.set_idle(self.cfg.get('idle_gif',''));  self.canvas.bind('<ButtonPress-1>',self.drag_start); self.canvas.bind('<B1-Motion>',self.drag_move); self.canvas.bind('<Button-3>',self.popup)
   box=tk.Frame(self.root,bg='#171927',highlightbackground='#d4ad65',highlightthickness=2); box.pack(fill='x',padx=4)
@@ -87,7 +89,7 @@ class App:
   self.btn=tk.Button(row,text='開始',width=5,command=self.toggle); self.btn.pack(side='left',padx=2)
   for text,cmd in [('重設',self.reset),('文字檔',self.open_messages),('設定',self.settings),('縮小',self.minimize_to_tray),('結束',self.close)]:tk.Button(row,text=text,width=5,command=cmd).pack(side='left',padx=2)
   self.menu=tk.Menu(self.root,tearoff=0)
-  for label,cmd in [('縮小至系統匣',self.minimize_to_tray),('設定',self.settings),('檢查更新',lambda:self.check_updates(True)),('開啟文字檔',self.open_messages),('預覽提醒動畫',lambda:self.show_alarm(False)),('測試手機通知',lambda:self.notify(True)),('結束',self.close)]:self.menu.add_command(label=label,command=cmd)
+  for label,cmd in [('縮小至系統匣',self.minimize_to_tray),('設定',self.settings),('行程查詢',self.calendar.query),('檢查更新',lambda:self.check_updates(True)),('開啟文字檔',self.open_messages),('預覽提醒動畫',lambda:self.show_alarm(False)),('測試手機通知',lambda:self.notify(True)),('結束',self.close)]:self.menu.add_command(label=label,command=cmd)
   self.update_window_size();self.root.bind('<Button-3>',self.popup); self.update_label(); self.root.after(100,self.tick);self.root.after(100,self.process_tray_events);self.root.after(100,self.process_update_events);self.root.after(2000,self.check_updates)
  def check_updates(self,manual=False):
   if self.update_checking:return
@@ -247,7 +249,7 @@ class App:
     msg=str(e);self.root.after(0,lambda:messagebox.showwarning('手機通知失敗',msg,parent=self.root))
   threading.Thread(target=worker,daemon=True).start()
  def settings(self):
-  w=tk.Toplevel(self.root);w.title('HawkTimer 設定');w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
+  w=tk.Toplevel(self.root);w.title('HawkTimer 設定 v'+APP_VERSION);w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
   f=ttk.Frame(w,padding=15);f.grid()
   minutes=tk.StringVar(value=str(self.cfg['minutes']));seconds=tk.StringVar(value=str(self.cfg.get('seconds',0)));topic=tk.StringVar(value=self.cfg['topic']);gif=tk.StringVar(value=self.cfg['gif']);idle=tk.StringVar(value=self.cfg.get('idle_gif',''));window_scale=tk.StringVar(value=str(self.cfg.get('window_scale',100)));character_scale=tk.StringVar(value=str(self.cfg.get('character_scale',100)));notify=tk.BooleanVar(value=self.cfg['notify']);sound=tk.BooleanVar(value=self.cfg['sound']);top=tk.BooleanVar(value=self.cfg['topmost'])
   for r,(label,var) in enumerate([('專注時間（分鐘）',minutes),('ntfy 主題',topic),('提醒 GIF / 圖片',gif),('常駐 GIF / 圖片',idle)]):
@@ -283,6 +285,7 @@ class App:
    changed=(m,sec)!=(self.cfg['minutes'],self.cfg.get('seconds',0));self.cfg.update(minutes=m,seconds=sec,topic=t,gif=p,idle_gif=idlepath,window_scale=ws,character_scale=cs,messages=messages,notify=notify.get(),sound=sound.get(),topmost=top.get());self.root.attributes('-topmost',top.get());self.update_window_size();self.set_idle(idlepath);self.save()
    if changed:self.reset()
    w.destroy()
+  ttk.Button(f,text='Google Calendar 設定',command=self.calendar.settings).grid(row=11,column=0,columnspan=2,pady=10)
   ttk.Button(f,text='儲存',command=apply).grid(row=11,column=3,pady=10)
  def show_alarm(self,actual,message=None):
   if message is None:
