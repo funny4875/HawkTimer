@@ -66,17 +66,26 @@ class CalendarUI:
    def auto_ical():
     import calendar_browser
     if getattr(self,'browser_busy',False):return
-    messagebox.showinfo('自動取得 iCal 網址','接下來會開啟 Chrome。請自行登入 Google 帳號，登入完成後程式會嘗試自動複製網址。\n\n若網頁版面不同，可自行在 Chrome 複製非公開 iCal 網址，再回到此視窗貼上。',parent=dialog)
     self.browser_busy=True;auto_button.config(state='disabled')
     try:before=dialog.clipboard_get()
     except tk.TclError:before=''
     was_topmost=bool(self.app.root.attributes('-topmost'))
-    self.app.root.attributes('-topmost',False);dialog.withdraw();w.withdraw()
+    root_visible=bool(self.app.root.winfo_viewable());self.app.root.attributes('-topmost',False);dialog.withdraw();w.withdraw()
+    if root_visible:self.app.root.withdraw()
+    prompt=tk.Toplevel(self.app.root);prompt.overrideredirect(True);prompt.configure(bg='#ff00ff');prompt.wm_attributes('-transparentcolor','#ff00ff');prompt.attributes('-topmost',True)
+    prompt.geometry(f'360x440+{max(0,prompt.winfo_screenwidth()-380)}+80')
+    tk.Label(prompt,text='請先登入 Google 帳號',font=('Microsoft JhengHei',15,'bold'),fg='#f3d393',bg='#1d2337',padx=16,pady=10).pack(side='bottom',pady=(0,8))
+    image=tk.Label(prompt,bg='#ff00ff',bd=0);image.pack(side='top')
+    frames,durations=self.app.login_prompt_frames();prompt.frames=frames
+    def animate(i=0):
+     if prompt.winfo_exists():
+      image.configure(image=frames[i%len(frames)]);prompt.after(durations[i%len(frames)],lambda:animate(i+1))
+    animate()
     def run_browser():
      try:calendar_browser.obtain_ical();error=None
      except ValueError as exc:error=str(exc)
      except Exception:error='無法完成自動取得。請確認 Chrome 已安裝、網路正常，並在瀏覽器自行登入後手動複製非公開 iCal 網址。'
-     return (dialog,w,url,auto_button,before,was_topmost,error)
+     return (dialog,w,url,auto_button,before,was_topmost,root_visible,prompt,error)
     self.task('browser',run_browser)
    auto_button=ttk.Button(frame,text='自動取得',command=auto_ical);auto_button.grid(row=3,column=0,sticky='w',pady=(14,0))
    buttons=ttk.Frame(frame);buttons.grid(row=3,column=0,sticky='e',pady=(14,0))
@@ -131,7 +140,9 @@ class CalendarUI:
     if kind=='browser':
      self.browser_busy=False
      if error:messagebox.showerror('自動取得失敗',error,parent=self.app.root);continue
-     dialog,w,url,button,before,topmost,problem=value
+     dialog,w,url,button,before,topmost,root_visible,prompt,problem=value
+     if prompt.winfo_exists():prompt.destroy()
+     if root_visible and not self.app.tray_hidden:self.app.root.deiconify()
      self.app.root.attributes('-topmost',topmost)
      if not dialog.winfo_exists():continue
      if w.winfo_exists():w.deiconify()

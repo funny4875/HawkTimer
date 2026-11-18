@@ -10,7 +10,7 @@ CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
 DEFAULT={'calendar_notify':False,'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
-APP_VERSION='1.4.5'
+APP_VERSION='1.4.6'
 RELEASE_API='https://api.github.com/repos/funny4875/HawkTimer/releases/latest'
 def read_config():
  try:
@@ -157,6 +157,10 @@ class App:
   height=max(round(385*window_factor),round(380*figure_factor)+5)
   self.canvas.configure(width=width,height=height);self.canvas.coords(self.idle_item,width//2,height//2)
   self.root.geometry(f'{width}x{height+95}')
+ def login_prompt_frames(self):
+  path=self.cfg.get('idle_gif') or os.path.join(BASE,'mihawk_idle.gif')
+  try:return load_frames(path,(340,360),upscale=True)
+  except (OSError,ValueError):return load_frames(os.path.join(BASE,'mihawk_idle.gif'),(340,360),upscale=True)
  def set_idle(self,path):
   if self.idle_job: self.root.after_cancel(self.idle_job); self.idle_job=None
   factor=self.cfg.get('character_scale',100)/100;size=(round(350*factor),round(380*factor))
