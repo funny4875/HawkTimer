@@ -40,9 +40,9 @@ class SchedulerTests(unittest.TestCase):
   ui.queue.put(('poll',(now,([event],[])),None));ui.process();self.assertEqual(len(messages),1)
  def test_summary_never_mobile(self):
   now=datetime.datetime.now().astimezone()
-  if now.hour<8:self.skipTest('summary is scheduled after 08:00 local time')
+  if (now.hour,now.minute)<(8,20):self.skipTest('summary is scheduled after 08:20 local time')
   ui,messages,notifications=self.make_ui([],mobile=True)
-  self.assertEqual(messages[0][0],'未來 7 天行程');self.assertEqual(notifications,[])
+  self.assertEqual(messages[0][0],'未來 30 天行程');self.assertEqual(notifications,[])
  def test_failed_account_is_visible_and_does_not_mark_summary(self):
   ui,messages,_=self.make_ui([],errors=['account failed'])
   self.assertEqual(messages[0][0],'行事曆同步失敗');self.assertEqual(ui.last_summary,'')
@@ -106,53 +106,10 @@ class QueryDateTests(unittest.TestCase):
   for start,end in [('',''),('2026-02-30',''),('2026-11-17','2026-11-16'),('2026-11-17','9999-12-31')]:
    with self.subTest(start=start,end=end),self.assertRaises(ValueError):query_dates(start,end)
 
-class BrowserGuideTests(unittest.TestCase):
- def test_clicks_only_verified_copy_button(self):
-  import calendar_browser as browser
-  class Element:
-   def __init__(self,label):self.label=label;self.clicked=False
-   def is_displayed(self):return True
-   def is_enabled(self):return True
-   def click(self):self.clicked=True
-   def find_element(self,*args):return self
-   def get_attribute(self,name):return self.label if name=='aria-label' else ''
-  class Driver:
-   def __init__(self,label):self.first=Element('first');self.second=Element(label);self.service=self;self.current_url='https://calendar.google.com/calendar/u/0/r/settings'
-   def find_elements(self,*args):return []
-   def get(self,url):pass
-   def find_element(self,by,xpath):return self.first if xpath==browser.FIRST else self.second
-   def quit(self):pass
-   def stop(self):pass
-  for label,allowed in [('複製到剪貼簿',True),('刪除日曆',False)]:
-   d=Driver(label)
-   with self.subTest(label=label),patch.object(browser.time,'sleep') as sleep:
-    if allowed:browser.obtain_ical(driver_factory=lambda **kw:d)
-    else:
-     with self.assertRaises(ValueError):browser.obtain_ical(driver_factory=lambda **kw:d)
-    self.assertTrue(d.first.clicked);self.assertEqual(d.second.clicked,allowed)
-    self.assertEqual(sleep.call_count,2 if allowed else 1)
 
-class CalendarReadyTests(unittest.TestCase):
- def test_signin_page_is_never_automated(self):
-  import calendar_browser as b
-  from types import SimpleNamespace
-  d=SimpleNamespace(current_url='https://accounts.google.com/signin',find_elements=lambda *args: self.fail('must not inspect login page'))
-  self.assertFalse(b.calendar_ready(d))
- def test_only_safe_dismiss_buttons_clicked(self):
-  import calendar_browser as b
-  class Button:
-   def __init__(self,label):self.text=label;self.clicked=False
-   def get_attribute(self,name):return ''
-   def is_displayed(self):return True
-   def is_enabled(self):return True
-   def click(self):self.clicked=True
-  class Dialog:
-   def __init__(self,buttons):self.buttons=buttons
-   def is_displayed(self):return True
-   def find_elements(self,*args):return self.buttons
-  class Driver:
-   current_url='https://calendar.google.com/calendar/u/0/r'
-   def __init__(self,buttons):self.buttons=buttons
-   def find_elements(self,*args):return [Dialog(self.buttons)]
-  unsafe=Button('刪除');safe=Button('稍後再說');d=Driver([unsafe,safe])
-  self.assertFalse(b.calendar_ready(d));self.assertFalse(unsafe.clicked);self.assertTrue(safe.clicked)
+class SummarySettingsTests(unittest.TestCase):
+ def test_defaults_and_custom_values(self):
+  from calendar_ui import summary_settings
+  self.assertEqual(summary_settings({}),(8,20,30))
+  self.assertEqual(summary_settings({'calendar_summary_time':'09:45','calendar_summary_days':14}),(9,45,14))
+  self.assertEqual(summary_settings({'calendar_summary_time':'25:00','calendar_summary_days':0}),(8,20,30))

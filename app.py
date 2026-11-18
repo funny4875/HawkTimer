@@ -1,16 +1,17 @@
 import os, sys, json, time, math, threading, urllib.request, re, winsound, random, ssl, truststore, queue, pystray
+from version_info import APP_VERSION, DISPLAY_VERSION, window_title, VersionedMessageBox
 import calendar_ui
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from PIL import Image, ImageTk, ImageSequence
+messagebox=VersionedMessageBox(messagebox)
 BASE=getattr(sys,'_MEIPASS',os.path.dirname(os.path.abspath(__file__)))
 ICON=os.path.join(BASE,'icon.ico' if getattr(sys,'frozen',False) else 'assets/icon.ico')
 CONFIG_DIR=os.path.join(os.environ.get('APPDATA',os.path.expanduser('~')),'HawkPomodoro')
 CONFIG=os.path.join(CONFIG_DIR,'settings.json')
 MESSAGE_FILE=os.path.join(os.path.dirname(sys.executable) if getattr(sys,'frozen',False) else BASE,'message.txt')
-DEFAULT={'calendar_notify':False,'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
+DEFAULT={'calendar_notify':False,'calendar_summary_time':'08:20','calendar_summary_days':30,'minutes':25,'seconds':0,'topic':'your-ntfy-topic','notify':True,'sound':True,'topmost':True,'x':None,'y':None,'gif':'','idle_gif':'','window_scale':100,'character_scale':100,'messages':['時間到！休息一下。','辛苦了，起來活動一下！','專注完成，該喝水囉！']}
 KEY='#ff00ff'
-APP_VERSION='1.4.6'
 RELEASE_API='https://api.github.com/repos/funny4875/HawkTimer/releases/latest'
 def read_config():
  try:
@@ -75,7 +76,7 @@ def load_frames(path, size, upscale=False):
  return frames,durations
 class App:
  def __init__(self):
-  self.cfg=read_config(); self.icon_path=ICON; self.root=tk.Tk(); self.root.title('HawkTimer 鷹眼計時'); self.root.iconbitmap(ICON);  self.root.overrideredirect(True); self.root.configure(bg=KEY); self.root.wm_attributes('-transparentcolor',KEY); self.root.attributes('-topmost',bool(self.cfg['topmost']))
+  self.cfg=read_config(); self.icon_path=ICON; self.root=tk.Tk(); self.root.title(window_title('HawkTimer 鷹眼計時')); self.root.iconbitmap(ICON);  self.root.overrideredirect(True); self.root.configure(bg=KEY); self.root.wm_attributes('-transparentcolor',KEY); self.root.attributes('-topmost',bool(self.cfg['topmost']))
   x=self.cfg['x']; y=self.cfg['y']; self.root.geometry('360x480'+(f'+{x}+{y}' if x is not None and y is not None and x>=0 and y>=0 else '+100+100'))
   self.running=False; self.end=0; self.remaining=int(self.cfg['minutes'])*60+int(self.cfg.get('seconds',0)); self.alarm=None
   self.tray_icon=None;self.tray_hidden=False;self.tray_starting=False;self.tray_events=queue.Queue()
@@ -84,6 +85,7 @@ class App:
   self.canvas=tk.Canvas(self.root,width=360,height=385,bg=KEY,highlightthickness=0); self.canvas.pack()
   self.idle_item=self.canvas.create_image(180,190); self.idle_job=None; self.set_idle(self.cfg.get('idle_gif',''));  self.canvas.bind('<ButtonPress-1>',self.drag_start); self.canvas.bind('<B1-Motion>',self.drag_move); self.canvas.bind('<Button-3>',self.popup)
   box=tk.Frame(self.root,bg='#171927',highlightbackground='#d4ad65',highlightthickness=2); box.pack(fill='x',padx=4)
+  tk.Label(box,text=DISPLAY_VERSION,font=('Microsoft JhengHei',8),fg='#c3ae7c',bg='#171927').place(relx=1.0,x=-5,y=2,anchor='ne')
   self.label=tk.Label(box,font=('Microsoft JhengHei',25,'bold'),fg='#f2d392',bg='#171927',cursor='hand2'); self.label.pack();self.label.bind('<Button-1>',self.edit_time);self.edit_entry=None
   row=tk.Frame(box,bg='#171927'); row.pack(pady=(0,6))
   self.btn=tk.Button(row,text='開始',width=5,command=self.toggle); self.btn.pack(side='left',padx=2)
@@ -157,10 +159,6 @@ class App:
   height=max(round(385*window_factor),round(380*figure_factor)+5)
   self.canvas.configure(width=width,height=height);self.canvas.coords(self.idle_item,width//2,height//2)
   self.root.geometry(f'{width}x{height+95}')
- def login_prompt_frames(self):
-  path=self.cfg.get('idle_gif') or os.path.join(BASE,'mihawk_idle.gif')
-  try:return load_frames(path,(340,360),upscale=True)
-  except (OSError,ValueError):return load_frames(os.path.join(BASE,'mihawk_idle.gif'),(340,360),upscale=True)
  def set_idle(self,path):
   if self.idle_job: self.root.after_cancel(self.idle_job); self.idle_job=None
   factor=self.cfg.get('character_scale',100)/100;size=(round(350*factor),round(380*factor))
@@ -259,7 +257,7 @@ class App:
   try:menu.tk_popup(self.root.winfo_pointerx(),self.root.winfo_pointery())
   finally:menu.grab_release()
  def alarm_settings(self):
-  w=tk.Toplevel(self.root);w.title('HawkTimer 鬧鐘設定 v'+APP_VERSION);w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
+  w=tk.Toplevel(self.root);w.title(window_title('HawkTimer 鬧鐘設定'));w.iconbitmap(ICON);w.transient(self.root);w.attributes('-topmost',True);w.resizable(False,False)
   w.configure(bg='#f4f6fa')
   header=tk.Frame(w,bg='#1d2337',padx=20,pady=12);header.pack(fill='x')
   tk.Label(header,text='鬧鐘與外觀設定',font=('Microsoft JhengHei',15,'bold'),fg='#f3d393',bg='#1d2337').pack(anchor='w')
@@ -269,7 +267,7 @@ class App:
    ttk.Label(f,text=label).grid(row=r,column=0,sticky='w',pady=4);ttk.Entry(f,textvariable=var,width=38).grid(row=r,column=1,sticky='ew')
   ttk.Label(f,text='秒').grid(row=0,column=2,sticky='e');ttk.Entry(f,textvariable=seconds,width=5).grid(row=0,column=3,sticky='w')
   def browse(var):
-   p=filedialog.askopenfilename(parent=w,title='選擇 GIF 或圖片',filetypes=[('圖片','*.gif *.png *.jpg *.jpeg *.webp'),('所有檔案','*.*')])
+   p=filedialog.askopenfilename(parent=w,title=window_title('選擇 GIF 或圖片'),filetypes=[('圖片','*.gif *.png *.jpg *.jpeg *.webp'),('所有檔案','*.*')])
    if p:var.set(p)
   for r,var in [(2,gif),(3,idle)]:
    ttk.Button(f,text='選擇檔案',command=lambda v=var:browse(v)).grid(row=r,column=2,padx=4);ttk.Button(f,text='使用預設',command=lambda v=var:v.set('')).grid(row=r,column=3)
@@ -308,7 +306,7 @@ class App:
   try:frames,durations=load_frames(path,(350,350))
   except Exception as e:
    messagebox.showwarning('動畫載入失敗',f'{e}\n改用預設動畫。',parent=self.root);frames,durations=load_frames(os.path.join(BASE,'mihawk_action.gif'),(350,350))
-  w=tk.Toplevel(self.root);self.alarm=w;self.root.withdraw()
+  w=tk.Toplevel(self.root);w.title(window_title('HawkTimer 提醒'));self.alarm=w;self.root.withdraw()
   def restore_idle(event):
    if event.widget is w and self.root.winfo_exists():
     self.alarm=None
@@ -318,7 +316,7 @@ class App:
   c=tk.Canvas(w,width=360,height=height,bg=KEY,highlightthickness=0);c.pack();item=c.create_image(180,175,image=frames[0]);c.create_rectangle(8,355,352,height-2,fill='#171927',outline='#d4ad65',width=2)
   textframe=tk.Frame(w,bg='#171927');c.create_window(18,365,anchor='nw',window=textframe,width=324,height=height-400)
   text=tk.Text(textframe,wrap='word',font=('Microsoft JhengHei',14,'bold'),fg='white',bg='#171927',relief='flat',borderwidth=0,highlightthickness=0,cursor='arrow');scroll=ttk.Scrollbar(textframe,orient='vertical',command=text.yview);text.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');text.pack(side='left',fill='both',expand=True);text.configure(state='disabled')
-  c.create_text(180,height-16,text='點擊圖片關閉提醒',fill='#e5cf9c',font=('Microsoft JhengHei',10));c.bind('<Button-1>',lambda e:w.destroy());w.bind('<Escape>',lambda e:w.destroy())
+  c.create_text(180,height-16,text='點擊圖片關閉提醒　'+DISPLAY_VERSION,fill='#e5cf9c',font=('Microsoft JhengHei',10));c.bind('<Button-1>',lambda e:w.destroy());w.bind('<Escape>',lambda e:w.destroy())
   def typewrite(i=0):
    if not w.winfo_exists():return
    if i<len(message):

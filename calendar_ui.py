@@ -2,6 +2,19 @@ import os, json, queue, threading, datetime, tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import calendar_service as service
 from dateutil.relativedelta import relativedelta
+from version_info import APP_VERSION, window_title, VersionedMessageBox
+messagebox=VersionedMessageBox(messagebox)
+
+def summary_settings(cfg):
+ try:
+  value=cfg.get('calendar_summary_time','08:20')
+  if len(value)!=5 or value[2]!=':':raise ValueError()
+  hour,minute=map(int,value.split(':'))
+  if not 0<=hour<=23 or not 0<=minute<=59:raise ValueError()
+  days=int(cfg.get('calendar_summary_days',30))
+  if not 1<=days<=365:raise ValueError()
+  return hour,minute,days
+ except (ValueError,TypeError,AttributeError):return 8,20,30
 
 def query_dates(start_text,end_text):
  try:
@@ -34,7 +47,7 @@ class CalendarUI:
    except Exception as e:self.queue.put((kind,None,str(e)))
   threading.Thread(target=work,daemon=True).start()
  def settings(self):
-  w=tk.Toplevel(self.app.root);w.title('Google 日曆設定');w.iconbitmap(self.app.icon_path);w.transient(self.app.root);w.configure(bg='#f4f6fa');w.geometry('670x460');w.minsize(600,410)
+  w=tk.Toplevel(self.app.root);w.title(window_title('Google 日曆設定'));w.iconbitmap(self.app.icon_path);w.transient(self.app.root);w.configure(bg='#f4f6fa');w.geometry('670x460');w.minsize(600,410)
   header=tk.Frame(w,bg='#1d2337',padx=22,pady=16);header.pack(fill='x')
   tk.Label(header,text='Google 日曆',font=('Microsoft JhengHei',16,'bold'),fg='#f3d393',bg='#1d2337').pack(anchor='w')
   tk.Label(header,text='使用 iCal 非公開網址加入日曆',font=('Microsoft JhengHei',10),fg='#d8dfeb',bg='#1d2337').pack(anchor='w',pady=(4,0))
@@ -55,7 +68,7 @@ class CalendarUI:
     try:os.remove(path);refresh()
     except OSError as e:messagebox.showerror('刪除失敗',str(e),parent=w)
   def add_ical():
-   dialog=tk.Toplevel(w);dialog.title('新增 Google 日曆');dialog.iconbitmap(self.app.icon_path);dialog.transient(w);dialog.configure(bg='#f4f6fa');dialog.resizable(False,False)
+   dialog=tk.Toplevel(w);dialog.title(window_title('新增 Google 日曆'));dialog.iconbitmap(self.app.icon_path);dialog.transient(w);dialog.configure(bg='#f4f6fa');dialog.resizable(False,False)
    frame=ttk.Frame(dialog,padding=20);frame.pack(fill='both',expand=True)
    ttk.Label(frame,text='貼上 iCal 非公開網址',font=('Microsoft JhengHei',12,'bold')).grid(row=0,column=0,sticky='w')
    ttk.Label(frame,text='帳號名稱會從網址自動取得；網址會在此電腦加密保存。',wraplength=500).grid(row=1,column=0,sticky='w',pady=(6,10))
@@ -63,36 +76,30 @@ class CalendarUI:
    def save_feed():
     try:service.add_feed(url.get());refresh();dialog.destroy()
     except Exception as e:messagebox.showerror('新增失敗',str(e),parent=dialog)
-   def auto_ical():
-    import calendar_browser
-    if getattr(self,'browser_busy',False):return
-    self.browser_busy=True;auto_button.config(state='disabled')
-    try:before=dialog.clipboard_get()
-    except tk.TclError:before=''
-    was_topmost=bool(self.app.root.attributes('-topmost'))
-    root_visible=bool(self.app.root.winfo_viewable());self.app.root.attributes('-topmost',False);dialog.withdraw();w.withdraw()
-    if root_visible:self.app.root.withdraw()
-    prompt=tk.Toplevel(self.app.root);prompt.overrideredirect(True);prompt.configure(bg='#ff00ff');prompt.wm_attributes('-transparentcolor','#ff00ff');prompt.attributes('-topmost',True)
-    prompt.geometry(f'360x440+{max(0,prompt.winfo_screenwidth()-380)}+80')
-    tk.Label(prompt,text='請先登入 Google 帳號',font=('Microsoft JhengHei',15,'bold'),fg='#f3d393',bg='#1d2337',padx=16,pady=10).pack(side='bottom',pady=(0,8))
-    image=tk.Label(prompt,bg='#ff00ff',bd=0);image.pack(side='top')
-    frames,durations=self.app.login_prompt_frames();prompt.frames=frames
-    def animate(i=0):
-     if prompt.winfo_exists():
-      image.configure(image=frames[i%len(frames)]);prompt.after(durations[i%len(frames)],lambda:animate(i+1))
-    animate()
-    def run_browser():
-     try:calendar_browser.obtain_ical();error=None
-     except ValueError as exc:error=str(exc)
-     except Exception:error='無法完成自動取得。請確認 Chrome 已安裝、網路正常，並在瀏覽器自行登入後手動複製非公開 iCal 網址。'
-     return (dialog,w,url,auto_button,before,was_topmost,root_visible,prompt,error)
-    self.task('browser',run_browser)
-   auto_button=ttk.Button(frame,text='自動取得',command=auto_ical);auto_button.grid(row=3,column=0,sticky='w',pady=(14,0))
    buttons=ttk.Frame(frame);buttons.grid(row=3,column=0,sticky='e',pady=(14,0))
    ttk.Button(buttons,text='取消',command=dialog.destroy).pack(side='left',padx=4);ttk.Button(buttons,text='新增日曆',command=save_feed).pack(side='left',padx=4)
    dialog.bind('<Return>',lambda e:save_feed())
   ttk.Button(row,text='＋ 新增 iCal 日曆',command=add_ical).pack(side='left',padx=(0,8))
   ttk.Button(row,text='刪除選取的日曆',command=remove).pack(side='left')
+  schedule=ttk.Frame(f);schedule.pack(fill='x',pady=(12,0))
+  ttk.Label(schedule,text='每日行程摘要時間（HH:MM）').pack(side='left')
+  summary_time=tk.StringVar(value=self.app.cfg.get('calendar_summary_time','08:20'))
+  ttk.Entry(schedule,textvariable=summary_time,width=7).pack(side='left',padx=5)
+  ttk.Label(schedule,text='顯示天數').pack(side='left',padx=(10,0))
+  summary_days=tk.StringVar(value=str(self.app.cfg.get('calendar_summary_days',30)))
+  ttk.Entry(schedule,textvariable=summary_days,width=5).pack(side='left',padx=5)
+  def save_summary():
+   value=summary_time.get().strip();days=summary_days.get().strip()
+   try:
+    if len(value)!=5 or value[2]!=':':raise ValueError()
+    hour,minute=map(int,value.split(':'));count=int(days)
+    if not 0<=hour<=23 or not 0<=minute<=59 or not 1<=count<=365:raise ValueError()
+   except ValueError:messagebox.showwarning('設定錯誤','請輸入有效時間（HH:MM）及 1 至 365 的天數。',parent=w);return
+   self.app.cfg.update(calendar_summary_time=f'{hour:02d}:{minute:02d}',calendar_summary_days=count)
+   try:self.app.save()
+   except OSError as error:messagebox.showwarning('設定儲存失敗',str(error),parent=w);return
+   messagebox.showinfo('設定完成','每日行程摘要設定已儲存。',parent=w)
+  ttk.Button(schedule,text='儲存',command=save_summary).pack(side='left',padx=5)
   mobile=tk.BooleanVar(value=self.app.cfg.get('calendar_notify',False))
   def set_mobile():
    try:self.app.cfg['calendar_notify']=mobile.get();self.app.save()
@@ -100,12 +107,19 @@ class CalendarUI:
   ttk.Checkbutton(f,text='行程開始前 10 分鐘也發送手機通知',variable=mobile,command=set_mobile).pack(anchor='w',pady=(14,6))
   ttk.Button(f,text='查詢行程／空閒時段',command=self.query).pack(anchor='w')
  def query(self):
-  w=tk.Toplevel(self.app.root);w.title('行程與時間區段查詢');w.iconbitmap(self.app.icon_path);w.geometry('720x500')
+  w=tk.Toplevel(self.app.root);w.title(window_title('行程與時間區段查詢'));w.iconbitmap(self.app.icon_path);w.geometry('720x500')
   f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True);today=datetime.date.today()
-  start=tk.StringVar(value=today.isoformat());end=tk.StringVar(value='')
+  start=tk.StringVar(value=today.isoformat());end=tk.StringVar(value=(today+datetime.timedelta(days=30)).isoformat())
   ttk.Label(f,text='開始日期（YYYY-MM-DD）').grid(row=0,column=0,sticky='w');ttk.Entry(f,textvariable=start,width=14).grid(row=0,column=1,padx=5)
-  ttk.Label(f,text='結束日期').grid(row=0,column=2);ttk.Entry(f,textvariable=end,width=14).grid(row=0,column=3,padx=5)
-  ttk.Label(f,text='結束日期留白時，預設為開始日期的一個月後；查詢包含結束日期當天。').grid(row=1,column=0,columnspan=5,sticky='w',pady=(8,0))
+  ttk.Label(f,text='結束日期').grid(row=0,column=2)
+  end_controls=ttk.Frame(f);end_controls.grid(row=0,column=3,padx=5)
+  ttk.Entry(end_controls,textvariable=end,width=12).pack(side='left')
+  def shift_end(delta):
+   try:end.set((datetime.date.fromisoformat(end.get().strip())+datetime.timedelta(days=delta)).isoformat())
+   except (ValueError,OverflowError):messagebox.showwarning('日期錯誤','請先輸入有效的結束日期（YYYY-MM-DD）。',parent=w)
+  ttk.Button(end_controls,text='−',width=2,command=lambda:shift_end(-1)).pack(side='left',padx=(4,1))
+  ttk.Button(end_controls,text='+',width=2,command=lambda:shift_end(1)).pack(side='left')
+  ttk.Label(f,text='結束日期預填今天後 30 天；＋／− 每次調整一天，查詢包含結束日期當天。').grid(row=1,column=0,columnspan=5,sticky='w',pady=(8,0))
   result=tk.Text(f,wrap='word');result.grid(row=2,column=0,columnspan=5,sticky='nsew',pady=10);f.rowconfigure(2,weight=1);f.columnconfigure(3,weight=1)
   def search(auto=False):
    if not w.winfo_exists():return
@@ -125,37 +139,19 @@ class CalendarUI:
   button=ttk.Button(f,text='查詢',command=search);button.grid(row=0,column=4,padx=4)
   w.after(0,lambda:search(True))
  def show(self,title,lines):
-  w=tk.Toplevel(self.app.root);w.title(title);w.iconbitmap(self.app.icon_path);w.attributes('-topmost',True);w.geometry('700x420')
+  w=tk.Toplevel(self.app.root);w.title(window_title(title));w.iconbitmap(self.app.icon_path);w.attributes('-topmost',True);w.geometry('700x420')
   text=tk.Text(w,wrap='word',font=('Microsoft JhengHei',12));scroll=ttk.Scrollbar(w,command=text.yview);text.configure(yscrollcommand=scroll.set);scroll.pack(side='right',fill='y');text.pack(fill='both',expand=True);text.insert('1.0',lines);text.configure(state='disabled')
  def poll(self):
   if not self.busy and (service.account_paths() or service.feed_paths()):
    self.busy=True
-   now=datetime.datetime.now().astimezone();end=now+datetime.timedelta(days=7)
+   now=datetime.datetime.now().astimezone();_,_,days=summary_settings(self.app.cfg);end=now+datetime.timedelta(days=days)
    self.task('poll',lambda:(now,service.events_between(now,end)))
   self.app.root.after(60000,self.poll)
  def process(self):
   try:
    while True:
     kind,value,error=self.queue.get_nowait()
-    if kind=='browser':
-     self.browser_busy=False
-     if error:messagebox.showerror('自動取得失敗',error,parent=self.app.root);continue
-     dialog,w,url,button,before,topmost,root_visible,prompt,problem=value
-     if prompt.winfo_exists():prompt.destroy()
-     if root_visible and not self.app.tray_hidden:self.app.root.deiconify()
-     self.app.root.attributes('-topmost',topmost)
-     if not dialog.winfo_exists():continue
-     if w.winfo_exists():w.deiconify()
-     dialog.deiconify();dialog.lift();button.config(state='normal')
-     if problem:messagebox.showwarning('自動取得失敗',problem,parent=dialog);continue
-     try:
-      copied=dialog.clipboard_get()
-      service.feed_name(copied)
-      if '/private-' not in copied:raise ValueError('不是非公開 iCal 網址。')
-      if copied==before:raise ValueError('剪貼簿內容未更新，請手動複製非公開網址。')
-      url.set(copied)
-     except (tk.TclError,ValueError):messagebox.showwarning('未取得網址','無法確認複製的 iCal 網址，請手動貼上非公開網址。',parent=dialog)
-    elif kind=='add':
+    if kind=='add':
      if hasattr(self,'settings_window') and self.settings_window.winfo_exists():
       self.add_button.config(state='normal');self.refresh_accounts()
      if error:messagebox.showerror('帳號連結失敗',error,parent=self.app.root)
@@ -187,10 +183,11 @@ class CalendarUI:
       if self.app.cfg.get('calendar_notify',False):self.app.notify(False,msg)
       self.save_state()
      today=now.date().isoformat()
-     if now.hour>=8 and self.last_summary!=today and (not errors or self.partial_summary_date!=today):
-      body='\n'.join(map(service.describe,events)) if events else ('目前沒有取得行程。' if errors else '未來 7 天沒有行程。')
+     hour,minute,days=summary_settings(self.app.cfg)
+     if (now.hour,now.minute)>=(hour,minute) and self.last_summary!=today and (not errors or self.partial_summary_date!=today):
+      body='\n'.join(map(service.describe,events)) if events else ('目前沒有取得行程。' if errors else f'未來 {days} 天沒有行程。')
       if errors:body+='\n\n部分帳號同步失敗，清單可能不完整。'
-      self.show('未來 7 天行程',body)
+      self.show(f'未來 {days} 天行程',body)
       if errors:self.partial_summary_date=today
       else:self.last_summary=today;self.save_state()
   except queue.Empty:pass
