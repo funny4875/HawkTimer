@@ -110,17 +110,18 @@ class CalendarUI:
   w=tk.Toplevel(self.app.root);w.title(window_title('行程與時間區段查詢'));w.iconbitmap(self.app.icon_path);w.geometry('720x500')
   f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True);today=datetime.date.today()
   start=tk.StringVar(value=today.isoformat());end=tk.StringVar(value=(today+datetime.timedelta(days=30)).isoformat())
-  ttk.Label(f,text='開始日期（YYYY-MM-DD）').grid(row=0,column=0,sticky='w');ttk.Entry(f,textvariable=start,width=14).grid(row=0,column=1,padx=5)
-  ttk.Label(f,text='結束日期').grid(row=0,column=2)
-  end_controls=ttk.Frame(f);end_controls.grid(row=0,column=3,padx=5)
-  ttk.Entry(end_controls,textvariable=end,width=12).pack(side='left')
-  def shift_end(delta):
-   try:end.set((datetime.date.fromisoformat(end.get().strip())+datetime.timedelta(days=delta)).isoformat())
-   except (ValueError,OverflowError):messagebox.showwarning('日期錯誤','請先輸入有效的結束日期（YYYY-MM-DD）。',parent=w)
-  ttk.Button(end_controls,text='−',width=2,command=lambda:shift_end(-1)).pack(side='left',padx=(4,1))
-  ttk.Button(end_controls,text='+',width=2,command=lambda:shift_end(1)).pack(side='left')
-  ttk.Label(f,text='結束日期預填今天後 30 天；＋／− 每次調整一天，查詢包含結束日期當天。').grid(row=1,column=0,columnspan=5,sticky='w',pady=(8,0))
-  result=tk.Text(f,wrap='word');result.grid(row=2,column=0,columnspan=5,sticky='nsew',pady=10);f.rowconfigure(2,weight=1);f.columnconfigure(3,weight=1)
+  def date_row(row,label,var):
+   ttk.Label(f,text=label+'（YYYY-MM-DD）').grid(row=row,column=0,sticky='w',pady=4)
+   controls=ttk.Frame(f);controls.grid(row=row,column=1,sticky='w',padx=(12,0),pady=4)
+   ttk.Entry(controls,textvariable=var,width=14).pack(side='left')
+   def shift(delta):
+    try:var.set((datetime.date.fromisoformat(var.get().strip())+datetime.timedelta(days=delta)).isoformat())
+    except (ValueError,OverflowError):messagebox.showwarning('日期錯誤',f'請先輸入有效的{label}（YYYY-MM-DD）。',parent=w)
+   ttk.Button(controls,text='+',width=3,command=lambda:shift(1)).pack(side='left',padx=(8,2))
+   ttk.Button(controls,text='−',width=3,command=lambda:shift(-1)).pack(side='left')
+  date_row(0,'開始日期',start);date_row(1,'結束日期',end)
+  ttk.Label(f,text='結束日期預填今天後 30 天；＋／− 每次調整一天，查詢包含結束日期當天。').grid(row=2,column=0,columnspan=3,sticky='w',pady=(8,0))
+  result=tk.Text(f,wrap='word');result.grid(row=3,column=0,columnspan=3,sticky='nsew',pady=10);f.rowconfigure(3,weight=1);f.columnconfigure(1,weight=1)
   def search(auto=False):
    if not w.winfo_exists():return
    try:
@@ -136,7 +137,7 @@ class CalendarUI:
     try:return (w,result,button,span,service.events_between(a,b))
     except Exception as error:return (w,result,button,span,([], [str(error)]))
    self.task('query',fetch)
-  button=ttk.Button(f,text='查詢',command=search);button.grid(row=0,column=4,padx=4)
+  button=ttk.Button(f,text='查詢',command=search);button.grid(row=0,column=2,rowspan=2,padx=8)
   w.after(0,lambda:search(True))
  def show(self,title,lines):
   w=tk.Toplevel(self.app.root);w.title(window_title(title));w.iconbitmap(self.app.icon_path);w.attributes('-topmost',True);w.geometry('700x420')

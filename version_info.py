@@ -1,5 +1,5 @@
-APP_VERSION="1.4.7"
-DISPLAY_VERSION=f"v{APP_VERSION}（測試版）"
+APP_VERSION="1.4.8"
+DISPLAY_VERSION=f"v{APP_VERSION}"
 
 def window_title(title):
  return f"{title}  {DISPLAY_VERSION}"
