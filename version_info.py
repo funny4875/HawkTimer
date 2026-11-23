@@ -1,4 +1,4 @@
-APP_VERSION="1.4.8"
+APP_VERSION="1.4.9"
 DISPLAY_VERSION=f"v{APP_VERSION}"
 
 def window_title(title):

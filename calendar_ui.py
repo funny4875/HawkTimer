@@ -105,9 +105,17 @@ class CalendarUI:
    try:self.app.cfg['calendar_notify']=mobile.get();self.app.save()
    except OSError as error:messagebox.showwarning('設定儲存失敗',str(error),parent=w)
   ttk.Checkbutton(f,text='行程開始前 10 分鐘也發送手機通知',variable=mobile,command=set_mobile).pack(anchor='w',pady=(14,6))
-  ttk.Button(f,text='查詢行程／空閒時段',command=self.query).pack(anchor='w')
- def query(self):
-  w=tk.Toplevel(self.app.root);w.title(window_title('行程與時間區段查詢'));w.iconbitmap(self.app.icon_path);w.geometry('720x500')
+  ttk.Button(f,text='查詢行程／空閒時段',command=lambda:self.query(w)).pack(anchor='w')
+ def query(self,parent=None):
+  parent=parent or self.app.root
+  w=tk.Toplevel(parent);w.title(window_title('行程與時間區段查詢'));w.iconbitmap(self.app.icon_path)
+  parent.update_idletasks()
+  width,height=720,500
+  x=parent.winfo_rootx()+parent.winfo_width()
+  if x+width>parent.winfo_screenwidth():x=parent.winfo_rootx()-width
+  x=max(0,min(x,parent.winfo_screenwidth()-width))
+  y=max(0,min(parent.winfo_rooty(),parent.winfo_screenheight()-height))
+  w.geometry(f'{width}x{height}+{x}+{y}')
   f=ttk.Frame(w,padding=12);f.pack(fill='both',expand=True);today=datetime.date.today()
   start=tk.StringVar(value=today.isoformat());end=tk.StringVar(value=(today+datetime.timedelta(days=30)).isoformat())
   def date_row(row,label,var):
