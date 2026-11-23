@@ -156,6 +156,10 @@ def _events_between(start,end):
   except Exception as e:errors.append(name+': '+str(e))
  return sorted(results,key=lambda e:e['start']),errors
 def describe(event):
- def format_time(value):return value.strftime('%m/%d')+'（星期'+'一二三四五六日'[value.weekday()]+'）'+value.strftime(' %H:%M')
- start=format_time(event['start']);end=format_time(event['end'])
- return f"{start}－{end}  {event['title']}（{event['account']}）"+(' [全天]' if event['all_day'] else '')
+ def date_text(value):return value.strftime('%m/%d')+'('+'一二三四五六日'[value.weekday()]+')'
+ start=event['start'];end=event['end']
+ if event['all_day']:
+  span=date_text(start) if start.date()==end.date() else date_text(start)+' ~'+date_text(end)
+ elif start.date()!=end.date():span=date_text(start)+' ~'+date_text(end)
+ else:span=date_text(start)+start.strftime('%H:%M')+'~'+end.strftime('%H:%M')
+ return span+'  '+event['title']

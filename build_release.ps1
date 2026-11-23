@@ -15,8 +15,8 @@ function Sign-ReleaseFile([string]$Path) {
 }
 Sign-ReleaseFile $exe
 $icon = Join-Path $PSScriptRoot 'assets\icon.ico'
-& wix build -arch x64 -d "ExePath=$exe" -d "IconPath=$icon" installer.wxs -o 'dist\HawkTimer-1.4.9-x64.msi'
+& wix build -arch x64 -d "ExePath=$exe" -d "IconPath=$icon" installer.wxs -o 'dist\HawkTimer-1.4.10-x64.msi'
 if ($LASTEXITCODE -ne 0) { throw 'WiX build failed' }
 
-Sign-ReleaseFile (Join-Path $PSScriptRoot 'dist\HawkTimer-1.4.9-x64.msi')
+Sign-ReleaseFile (Join-Path $PSScriptRoot 'dist\HawkTimer-1.4.10-x64.msi')
 if (-not $signThumbprint) { Write-Warning 'No signing certificate configured; the release files are unsigned.' }

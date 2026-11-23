@@ -14,9 +14,15 @@ class Fake:
  def calendarList(self):return Resource('cal')
  def events(self):return Resource('event')
 class Tests(unittest.TestCase):
- def test_describe_shows_weekday_for_both_dates(self):
-  event={'start':datetime.datetime(2026,11,23,23,0),'end':datetime.datetime(2026,11,24,1,0),'title':'測試','account':'測試日曆','all_day':False}
-  self.assertIn('11/23（星期一） 23:00－11/24（星期二） 01:00',s.describe(event))
+ def test_describe_event_formats(self):
+  event={'start':datetime.datetime(2026,12,10,13,0),'end':datetime.datetime(2026,12,10,15,0),'title':'活動','account':'test@example.com','all_day':False}
+  self.assertEqual(s.describe(event),'12/10(四)13:00~15:00  活動')
+  event.update(start=datetime.datetime(2026,11,30),end=datetime.datetime(2026,12,3),all_day=True)
+  self.assertEqual(s.describe(event),'11/30(一) ~12/03(四)  活動')
+  event.update(end=datetime.datetime(2026,11,30))
+  self.assertEqual(s.describe(event),'11/30(一)  活動')
+  event.update(end=datetime.datetime(2026,12,1,1),all_day=False)
+  self.assertEqual(s.describe(event),'11/30(一) ~12/01(二)  活動')
  def test_dpapi(self):
   payload='測試'.encode();self.assertEqual(s.protect(s.protect(payload),True),payload)
  def test_multiple_calendars_and_partial_failure(self):
